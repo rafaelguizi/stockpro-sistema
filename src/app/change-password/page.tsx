@@ -1,13 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuthContext } from '@/contexts/AuthContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
 
 export default function ChangePasswordPage() {
   const router = useRouter()
-  const { user } = useAuthContext()
+  const { user } = useAuth()
   const toast = useToastContext()
   
   const [loading, setLoading] = useState(true)
