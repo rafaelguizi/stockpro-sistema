@@ -5,6 +5,16 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
 
+interface UserData {
+  id: string
+  companyId: string
+  companyName: string
+  mustChangePassword?: boolean
+  name?: string
+  email?: string
+  [key: string]: any
+}
+
 export default function ChangePasswordPage() {
   const router = useRouter()
   const { user } = useAuth()
@@ -12,7 +22,7 @@ export default function ChangePasswordPage() {
   
   const [loading, setLoading] = useState(true)
   const [submitLoading, setSubmitLoading] = useState(false)
-  const [userData, setUserData] = useState<any>(null)
+  const [userData, setUserData] = useState<UserData | null>(null)
   const [formData, setFormData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -29,7 +39,7 @@ export default function ChangePasswordPage() {
 
       try {
         const { db } = await import('@/lib/firebase')
-        const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore')
+        const { doc, getDoc, collection, getDocs } = await import('firebase/firestore')
 
         if (!db) throw new Error('Firebase não inicializado')
 
@@ -39,17 +49,18 @@ export default function ChangePasswordPage() {
         const companiesRef = collection(db, 'companies')
         const companiesSnapshot = await getDocs(companiesRef)
         
-        let foundUserData = null
+        let foundUserData: UserData | null = null
         
         for (const companyDoc of companiesSnapshot.docs) {
           const userDoc = await getDoc(doc(db, `companies/${companyDoc.id}/users`, user.uid))
           if (userDoc.exists()) {
+            const userData = userDoc.data()
             foundUserData = {
               id: userDoc.id,
               companyId: companyDoc.id,
               companyName: companyDoc.data().name,
-              ...userDoc.data()
-            }
+              ...userData
+            } as UserData
             break
           }
         }
@@ -137,13 +148,15 @@ export default function ChangePasswordPage() {
       console.log('✅ Senha atualizada no Auth')
 
       // 3. Marcar que não precisa mais alterar senha
-      console.log('📝 Atualizando flag no Firestore...')
-      await updateDoc(doc(db, `companies/${userData.companyId}/users`, user.uid), {
-        mustChangePassword: false,
-        passwordChangedAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      })
-      console.log('✅ Flag atualizada no Firestore')
+      if (userData) {
+        console.log('📝 Atualizando flag no Firestore...')
+        await updateDoc(doc(db, `companies/${userData.companyId}/users`, user.uid), {
+          mustChangePassword: false,
+          passwordChangedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        })
+        console.log('✅ Flag atualizada no Firestore')
+      }
 
       toast.success('Senha alterada!', 'Agora você pode acessar o sistema normalmente')
       
@@ -199,7 +212,7 @@ export default function ChangePasswordPage() {
           {userData && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                <strong>👋 Olá, {userData.name}!</strong><br/>
+                <strong>👋 Olá, {userData.name || 'Usuário'}!</strong><br/>
                 Empresa: {userData.companyName}
               </p>
             </div>
