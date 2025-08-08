@@ -5,7 +5,7 @@ import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
 
 // CREDENCIAIS ADMIN - ALTERE PARA AS SUAS
-const ADMIN_EMAIL = "rafaelfelipeg.ar@gmail.com"
+const ADMIN_EMAIL = "rafaelfelipeg.arf@gmail.com"
 const ADMIN_PASSWORD = "01r02f03g04b"
 
 interface Company {
