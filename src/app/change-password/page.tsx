@@ -132,25 +132,28 @@ export default function ChangePasswordPage() {
       const { updatePassword, reauthenticateWithCredential, EmailAuthProvider } = await import('firebase/auth')
       const { doc, updateDoc } = await import('firebase/firestore')
 
-      if (!auth || !db || !user) {
-        throw new Error('Firebase não inicializado')
+      if (!auth || !db || !auth.currentUser) {
+        throw new Error('Firebase não inicializado ou usuário não autenticado')
       }
+
+      // ✅ Usar auth.currentUser ao invés do nosso user personalizado
+      const firebaseUser = auth.currentUser
 
       // 1. Reautenticar com senha atual
       console.log('🔐 Reautenticando usuário...')
-      const credential = EmailAuthProvider.credential(user.email!, formData.currentPassword)
-      await reauthenticateWithCredential(user, credential)
+      const credential = EmailAuthProvider.credential(firebaseUser.email!, formData.currentPassword)
+      await reauthenticateWithCredential(firebaseUser, credential) // ✅ Agora usa o tipo correto
       console.log('✅ Reautenticação realizada')
 
       // 2. Atualizar senha no Firebase Auth
       console.log('🔑 Atualizando senha no Firebase Auth...')
-      await updatePassword(user, formData.newPassword)
+      await updatePassword(firebaseUser, formData.newPassword) // ✅ Usa firebaseUser
       console.log('✅ Senha atualizada no Auth')
 
       // 3. Marcar que não precisa mais alterar senha
       if (userData) {
         console.log('📝 Atualizando flag no Firestore...')
-        await updateDoc(doc(db, `companies/${userData.companyId}/users`, user.uid), {
+        await updateDoc(doc(db, `companies/${userData.companyId}/users`, firebaseUser.uid), {
           mustChangePassword: false,
           passwordChangedAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
