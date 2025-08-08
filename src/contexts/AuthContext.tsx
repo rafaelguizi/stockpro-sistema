@@ -8,7 +8,7 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc, collection, getDocs, DocumentData } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
 import { User, AuthContextType } from '@/types/user'
 
@@ -26,12 +26,20 @@ interface AuthProviderProps {
   children: React.ReactNode
 }
 
+// 🆕 Interface flexível para suportar ambas estruturas
+interface UserInfo {
+  userData: DocumentData
+  companyData: DocumentData | null
+  companyId: string | null
+  isMultiTenant: boolean
+}
+
 export default function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   // 🆕 Buscar usuário na estrutura multi-tenant
-  const findUserInCompanies = async (firebaseUser: FirebaseUser) => {
+  const findUserInCompanies = async (firebaseUser: FirebaseUser): Promise<UserInfo | null> => {
     try {
       console.log('🔍 Buscando usuário na estrutura multi-tenant...')
       
@@ -67,7 +75,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   }
 
   // 🔄 Buscar usuário na estrutura legacy (compatibilidade)
-  const findUserInLegacy = async (firebaseUser: FirebaseUser) => {
+  const findUserInLegacy = async (firebaseUser: FirebaseUser): Promise<UserInfo | null> => {
     try {
       console.log('🔄 Buscando usuário na estrutura legacy...')
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
@@ -119,7 +127,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
           
           // 🔒 Status e segurança
           isActive: userData.isActive !== false,
-          mustChangePassword: userData.mustChangePassword || false, // 🆕 Campo importante
+          mustChangePassword: userData.mustChangePassword || false,
           role: userData.role || 'COMPANY_USER',
           
           // 📅 Datas
