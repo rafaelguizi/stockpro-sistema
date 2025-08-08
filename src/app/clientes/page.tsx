@@ -287,7 +287,7 @@ export default function Clientes() {
       csvContent += `Nome,Email,Telefone,CPF/CNPJ,Tipo,Cidade,Estado,Limite Crédito,Status,Data Cadastro\n`
       
       clientes.forEach(cliente => {
-        csvContent += `${cliente.nome},${cliente.email},${cliente.telefone},${cliente.cpfCnpj},${cliente.tipoCliente === 'pessoa_fisica' ? 'Pessoa Física' : 'Pessoa Jurídica'},${cliente.cidade},${cliente.estado},R\$ ${cliente.limiteCredito.toFixed(2)},${cliente.ativo ? 'Ativo' : 'Inativo'},${cliente.dataCadastro}\n`
+        csvContent += `${cliente.nome},${cliente.email},${cliente.telefone},${cliente.cpfCnpj},${cliente.tipoCliente === 'pessoa_fisica' ? 'Pessoa Física' : 'Pessoa Jurídica'},${cliente.cidade},${cliente.estado},R$ ${cliente.limiteCredito.toFixed(2)},${cliente.ativo ? 'Ativo' : 'Inativo'},${cliente.dataCadastro}\n`
       })
       
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -975,7 +975,7 @@ export default function Clientes() {
 
                         <div>
                           <label className={`block text-sm font-medium mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Limite de Crédito (R\$)
+                            Limite de Crédito (R$)
                           </label>
                           <input
                             type="number"

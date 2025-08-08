@@ -15,12 +15,18 @@ export default function LoginPage() {
   
   const router = useRouter()
   const toast = useToastContext()
-  const { user, loading: authLoading, login } = useAuth()
+  const { user, loading: authLoading, login, checkPasswordChangeRequired } = useAuth()
 
   // Redirecionar se já estiver logado
   useEffect(() => {
     if (!authLoading && user) {
-      router.push('/dashboard')
+      // 🆕 Verificar se deve alterar senha antes de redirecionar
+      if (user.mustChangePassword) {
+        console.log('⚠️ Usuário deve alterar senha')
+        router.push('/change-password')
+      } else {
+        router.push('/dashboard')
+      }
     }
   }, [user, authLoading, router])
 
@@ -75,6 +81,29 @@ export default function LoginPage() {
     return true
   }
 
+  // 🆕 Verificar se deve alterar senha após login Firebase
+  const checkMustChangePasswordFirebase = async () => {
+    try {
+      const { auth: firebaseAuth } = await import('@/lib/firebase')
+      
+      if (firebaseAuth.currentUser && checkPasswordChangeRequired) {
+        const mustChange = await checkPasswordChangeRequired(firebaseAuth.currentUser)
+        
+        if (mustChange) {
+          console.log('⚠️ Usuário deve alterar senha (Firebase)')
+          toast.warning('Alteração obrigatória', 'Você precisa alterar sua senha por segurança')
+          router.push('/change-password')
+          return true
+        }
+      }
+      
+      return false
+    } catch (error) {
+      console.error('❌ Erro ao verificar mustChangePassword:', error)
+      return false
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -103,7 +132,7 @@ export default function LoginPage() {
           const data = await response.json()
           console.log('✅ Login API realizado:', data.user)
           
-          // 🆕 VERIFICAR SE É PRIMEIRO ACESSO
+          // 🆕 VERIFICAR SE É PRIMEIRO ACESSO (API)
           if (data.user.primeiroAcesso || data.user.senhaTemporaria) {
             toast.warning('Primeiro acesso detectado', 'Você precisa alterar sua senha por segurança')
             router.push('/alterar-senha?obrigatorio=true')
@@ -118,10 +147,19 @@ export default function LoginPage() {
         console.log('🔄 API login falhou, tentando Firebase...')
       }
 
-      // 🔄 FALLBACK PARA FIREBASE (usuários existentes)
+      // 🔄 FALLBACK PARA FIREBASE (usuários existentes + multi-tenant)
+      console.log('🔥 Tentando login Firebase...')
       await login(email.trim().toLowerCase(), password)
-      toast.success('Login realizado!', 'Bem-vindo de volta!')
-      router.push('/dashboard')
+      
+      // 🆕 VERIFICAR SE DEVE ALTERAR SENHA (FIREBASE MULTI-TENANT)
+      const mustChangePassword = await checkMustChangePasswordFirebase()
+      
+      if (!mustChangePassword) {
+        // Se não precisa alterar senha, prosseguir normalmente
+        toast.success('Login realizado!', 'Bem-vindo de volta!')
+        router.push('/dashboard')
+      }
+      // Se precisa alterar senha, a função checkMustChangePasswordFirebase já redirecionou
       
     } catch (error: any) {
       console.error('❌ Erro de autenticação:', error)

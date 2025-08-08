@@ -274,7 +274,7 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-green-100 text-sm">Faturamento</p>
-                      <p className="text-xl font-bold">R\$ {faturamentoMensal.totalFaturamento.toFixed(2)}</p>
+                      <p className="text-xl font-bold">R$ {faturamentoMensal.totalFaturamento.toFixed(2)}</p>
                       <p className="text-green-100 text-xs">{faturamentoMensal.quantidadeVendas} vendas</p>
                     </div>
                     <div className="text-4xl ml-3">💰</div>
@@ -460,7 +460,7 @@ export default function Dashboard() {
 
                   <div className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
                     <p className="text-xl font-bold text-green-600">
-                      R\$ {valorTotalEstoque.toFixed(2)}
+                      R$ {valorTotalEstoque.toFixed(2)}
                     </p>
                     <p className="text-green-600 font-semibold">Valor do Estoque</p>
                   </div>

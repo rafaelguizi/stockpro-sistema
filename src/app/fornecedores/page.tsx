@@ -1045,7 +1045,7 @@ export default function Fornecedores() {
 
                             <div>
                               <label className={`block text-sm font-medium mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
-                                Valor Mínimo de Compra (R\$)
+                                Valor Mínimo de Compra (R$)
                               </label>
                               <input
                                 type="number"
