@@ -1,6 +1,6 @@
 // src/components/MobileHeader.tsx
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import LoadingButton from './LoadingButton'
@@ -15,6 +15,22 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
   const router = useRouter()
   const { logout } = useAuth()
   const [menuAberto, setMenuAberto] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // Carregar preferência de collapse do localStorage
+  useEffect(() => {
+    const savedCollapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+    if (savedCollapsed !== null) {
+      setSidebarCollapsed(JSON.parse(savedCollapsed))
+    }
+  }, [])
+
+  // Salvar preferência no localStorage
+  const toggleSidebar = () => {
+    const newState = !sidebarCollapsed
+    setSidebarCollapsed(newState)
+    localStorage.setItem('stockpro_sidebar_collapsed', JSON.stringify(newState))
+  }
 
   const menuItems = [
     { 
@@ -194,71 +210,142 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
       )}
 
       {/* Sidebar Desktop */}
-      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200">
+      <div className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200 lg:shadow-lg transition-all duration-300 ease-in-out ${
+        sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
+      }`}>
+        
         {/* Header da Sidebar */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
-          <div className="flex items-center">
-            <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-3">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative">
+          <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
               <span className="text-xl font-bold">📦</span>
             </div>
-            <div>
-              <h1 className="text-xl font-bold">StockPro</h1>
-              <p className="text-blue-100 text-sm">Sistema de Gestão</p>
-            </div>
+            
+            {!sidebarCollapsed && (
+              <div className="ml-3 transition-all duration-300">
+                <h1 className="text-xl font-bold">StockPro</h1>
+                <p className="text-blue-100 text-sm">Sistema de Gestão</p>
+              </div>
+            )}
           </div>
+
+          {/* Botão de Collapse */}
+          <button
+            onClick={toggleSidebar}
+            className="absolute top-4 right-4 p-1.5 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-all duration-200 group"
+            title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
+          >
+            <svg 
+              className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
         </div>
 
         {/* User Info Desktop */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold">
+        {!sidebarCollapsed && (
+          <div className="p-4 border-b border-gray-200 bg-gray-50 transition-all duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold">
+                  {userEmail?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {userEmail || 'Usuário'}
+                </p>
+                <p className="text-xs text-gray-500">Administrador</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* User Info Collapsed */}
+        {sidebarCollapsed && (
+          <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
+            <div 
+              className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
+              title={userEmail || 'Usuário'}
+            >
+              <span className="text-white font-bold text-sm">
                 {userEmail?.charAt(0).toUpperCase() || 'U'}
               </span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {userEmail || 'Usuário'}
-              </p>
-              <p className="text-xs text-gray-500">Administrador</p>
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Navigation Desktop */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
           {menuItems.map((item) => (
-            <button
-              key={item.href}
-              onClick={() => router.push(item.href)}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                isCurrentPage(item.href)
-                  ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-500'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <div className="flex-1 text-left">
-                <div className="font-medium">{item.name}</div>
-                <div className="text-xs text-gray-500">{item.description}</div>
-              </div>
-              {isCurrentPage(item.href) && (
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <div key={item.href} className="relative group">
+              <button
+                onClick={() => router.push(item.href)}
+                className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                  isCurrentPage(item.href)
+                    ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-500'
+                    : 'text-gray-700 hover:bg-gray-100'
+                } ${sidebarCollapsed ? 'justify-center' : ''}`}
+                title={sidebarCollapsed ? item.name : ''}
+              >
+                <span className={`text-xl ${sidebarCollapsed ? '' : 'flex-shrink-0'}`}>
+                  {item.icon}
+                </span>
+                
+                {!sidebarCollapsed && (
+                  <div className="flex-1 text-left transition-all duration-300">
+                    <div className="font-medium">{item.name}</div>
+                    <div className="text-xs text-gray-500">{item.description}</div>
+                  </div>
+                )}
+                
+                {!sidebarCollapsed && isCurrentPage(item.href) && (
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                )}
+              </button>
+
+              {/* Tooltip para sidebar colapsada */}
+              {sidebarCollapsed && (
+                <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
+                  <div className="font-medium">{item.name}</div>
+                  <div className="text-xs text-gray-300">{item.description}</div>
+                  <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
+                </div>
               )}
-            </button>
+            </div>
           ))}
         </nav>
 
         {/* Footer Desktop */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <LoadingButton
-            onClick={handleLogout}
-            variant="danger"
-            size="md"
-            className="w-full"
-          >
-            🚪 Sair do Sistema
-          </LoadingButton>
+        <div className={`p-2 border-t border-gray-200 bg-gray-50 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
+          {sidebarCollapsed ? (
+            <div className="relative group">
+              <button
+                onClick={handleLogout}
+                className="p-3 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                title="Sair do Sistema"
+              >
+                🚪
+              </button>
+              <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
+                <div className="font-medium">Sair do Sistema</div>
+                <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
+              </div>
+            </div>
+          ) : (
+            <LoadingButton
+              onClick={handleLogout}
+              variant="danger"
+              size="md"
+              className="w-full"
+            >
+              🚪 Sair do Sistema
+            </LoadingButton>
+          )}
         </div>
       </div>
     </>
