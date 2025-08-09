@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO INTEGRADA E CORRIGIDA
+// src/app/produtos/page.tsx - VERSÃO INTEGRADA E CORRIGIDA COM ADAPTAÇÃO AO MENU
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -377,6 +377,27 @@ export default function Produtos() {
   const router = useRouter()
   const { user } = useAuth()
   const toast = useToastContext()
+  
+  // 🆕 ESTADO PARA CONTROLE DO MENU (ADAPTAÇÃO RESPONSIVA)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  // 🆕 SINCRONIZAÇÃO COM LOCALSTORAGE (ADAPTAÇÃO RESPONSIVA)
+  useEffect(() => {
+    const savedCollapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+    if (savedCollapsed !== null) {
+      setSidebarCollapsed(JSON.parse(savedCollapsed))
+    }
+
+    // Listener para mudanças no localStorage
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'stockpro_sidebar_collapsed' && e.newValue !== null) {
+        setSidebarCollapsed(JSON.parse(e.newValue))
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
   
   // 🆕 HOOK PARA CATEGORIAS FIRESTORE
   const { 
@@ -961,7 +982,10 @@ export default function Produtos() {
           userEmail={user?.email || undefined}
         />
 
-        <main className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 lg:ml-64">
+        {/* 🎯 MAIN COM ADAPTAÇÃO RESPONSIVA PARA O MENU */}
+        <main className={`max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out ${
+          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+        }`}>
 
           {/* Loading inicial */}
           {(loadingProdutos || loadingCategorias) && (
