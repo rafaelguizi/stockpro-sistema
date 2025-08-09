@@ -33,51 +33,51 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
   }
 
   const menuItems = [
-    { 
-      name: 'Dashboard', 
-      href: '/dashboard', 
+    {
+      name: 'Dashboard',
+      href: '/dashboard',
       icon: '📊',
       description: 'Visão geral do negócio'
     },
-    { 
-      name: 'Produtos', 
-      href: '/produtos', 
+    {
+      name: 'Produtos',
+      href: '/produtos',
       icon: '📦',
       description: 'Gestão de produtos'
     },
-    { 
-      name: 'Categorias', 
-      href: '/categorias', 
+    {
+      name: 'Categorias',
+      href: '/categorias',
       icon: '📂',
       description: 'Organizar produtos'
     },
-    { 
-      name: 'Clientes', 
-      href: '/clientes', 
+    {
+      name: 'Clientes',
+      href: '/clientes',
       icon: '👥',
       description: 'Gestão de clientes'
     },
-    { 
-      name: 'Fornecedores', 
-      href: '/fornecedores', 
-      icon: '🏪',
+    {
+      name: 'Fornecedores',
+      href: '/fornecedores',
+      icon: '🏭',
       description: 'Gestão de fornecedores'
     },
-    { 
-      name: 'PDV', 
-      href: '/pdv', 
-      icon: '🛒',
+    {
+      name: 'PDV',
+      href: '/pdv',
+      icon: '💰',
       description: 'Ponto de venda'
     },
-    { 
-      name: 'Movimentações', 
-      href: '/movimentacoes', 
+    {
+      name: 'Movimentações',
+      href: '/movimentacoes',
       icon: '📋',
       description: 'Histórico de estoque'
     },
-    { 
-      name: 'Relatórios', 
-      href: '/relatorios', 
+    {
+      name: 'Relatórios',
+      href: '/relatorios',
       icon: '📈',
       description: 'Análises e relatórios'
     }
@@ -115,7 +115,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
               )}
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
               <span className="text-white text-sm font-bold">
@@ -213,35 +213,43 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
       <div className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200 lg:shadow-lg transition-all duration-300 ease-in-out ${
         sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
       }`}>
-        
+
         {/* Header da Sidebar */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative">
           <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-              <span className="text-xl font-bold">📦</span>
-            </div>
-            
-            {!sidebarCollapsed && (
-              <div className="ml-3 transition-all duration-300">
-                <h1 className="text-xl font-bold">StockPro</h1>
-                <p className="text-blue-100 text-sm">Sistema de Gestão</p>
+            {/* Logo dinâmico - esconde completamente quando colapsado */}
+            {!sidebarCollapsed ? (
+              <>
+                <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                  <span className="text-xl font-bold">📦</span>
+                </div>
+                <div className="ml-3 transition-all duration-300">
+                  <h1 className="text-xl font-bold">StockPro</h1>
+                  <p className="text-blue-100 text-sm">Sistema de Gestão</p>
+                </div>
+              </>
+            ) : (
+              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                <span className="text-lg font-bold">S</span>
               </div>
             )}
           </div>
 
-          {/* Botão de Collapse */}
+          {/* 🆕 Botão de Toggle MELHORADO */}
           <button
             onClick={toggleSidebar}
-            className="absolute top-4 right-4 p-1.5 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-all duration-200 group"
+            className="absolute top-4 right-4 p-2 rounded-lg bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 group border border-white border-opacity-20 hover:border-opacity-40"
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
-            <svg 
-              className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`} 
-              fill="none" 
-              stroke="currentColor" 
+            {/* Seta dinâmica */}
+            <svg
+              className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
+              strokeWidth={2.5}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         </div>
@@ -268,7 +276,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
         {/* User Info Collapsed */}
         {sidebarCollapsed && (
           <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
-            <div 
+            <div
               className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
               title={userEmail || 'Usuário'}
             >
@@ -295,22 +303,22 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
                 <span className={`text-xl ${sidebarCollapsed ? '' : 'flex-shrink-0'}`}>
                   {item.icon}
                 </span>
-                
+
                 {!sidebarCollapsed && (
                   <div className="flex-1 text-left transition-all duration-300">
                     <div className="font-medium">{item.name}</div>
                     <div className="text-xs text-gray-500">{item.description}</div>
                   </div>
                 )}
-                
+
                 {!sidebarCollapsed && isCurrentPage(item.href) && (
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                 )}
               </button>
 
-              {/* Tooltip para sidebar colapsada */}
+              {/* Tooltip melhorado para sidebar colapsada */}
               {sidebarCollapsed && (
-                <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
+                <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl">
                   <div className="font-medium">{item.name}</div>
                   <div className="text-xs text-gray-300">{item.description}</div>
                   <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
@@ -331,7 +339,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
               >
                 🚪
               </button>
-              <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap">
+              <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl">
                 <div className="font-medium">Sair do Sistema</div>
                 <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
               </div>

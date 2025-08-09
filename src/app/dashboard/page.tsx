@@ -1,361 +1,469 @@
-// src/components/MobileHeader.tsx
+// src/app/dashboard/page.tsx
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import LoadingButton from '@/components/LoadingButton'
+import { useMultiTenantFirestore } from '@/hooks/useMultiTenantFirestore'
+import { useToastContext } from '@/components/ToastProvider'
+import MobileHeader from '@/components/MobileHeader'
+import ProtectedRoute from '@/components/ProtectedRoute'
 
-interface MobileHeaderProps {
-  title: string
-  currentPage: string
-  userEmail?: string
+interface Produto {
+  id: string
+  codigo: string
+  nome: string
+  categoria: string
+  estoqueMinimo: number
+  valorCompra: number
+  valorVenda: number
+  estoque: number
+  ativo: boolean
+  dataCadastro: string
+  userId: string
+  companyId?: string
+  // Campos para validade
+  temValidade?: boolean
+  dataValidade?: string
+  diasAlerta?: number
 }
 
-export default function MobileHeader({ title, currentPage, userEmail }: MobileHeaderProps) {
+interface Movimentacao {
+  id: string
+  produtoId: string
+  produto: string
+  codigo: string
+  tipo: 'entrada' | 'saida'
+  quantidade: number
+  valorUnitario: number
+  valorTotal: number
+  data: string
+  hora: string
+  observacao: string
+  userId: string
+  companyId?: string
+}
+
+export default function Dashboard() {
   const router = useRouter()
-  const { logout } = useAuth()
-  const [menuAberto, setMenuAberto] = useState(false)
+  const { user } = useAuth()
+  const toast = useToastContext()
+  
+  // 🆕 Hooks Multi-tenant
+  const { data: produtos, loading: loadingProdutos } = useMultiTenantFirestore<Produto>('produtos')
+  const { data: movimentacoes, loading: loadingMovimentacoes } = useMultiTenantFirestore<Movimentacao>('movimentacoes')
+
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Simular um pequeno delay para melhor UX
+    const timer = setTimeout(() => {
+      setLoading(false)
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Aguardar dados do Firebase
+  const isDataLoading = loading || loadingProdutos || loadingMovimentacoes
+
+  // Função para verificar produtos próximos do vencimento
+  const verificarProdutosVencimento = () => {
+    if (!produtos) return { vencendoHoje: [], vencendoEm7Dias: [], vencendoEm30Dias: [], vencidos: [] }
+
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+
+    const produtosComValidade = produtos.filter(p => p.ativo && p.temValidade && p.dataValidade)
+
+    const vencidos: Produto[] = []
+    const vencendoHoje: Produto[] = []
+    const vencendoEm7Dias: Produto[] = []
+    const vencendoEm30Dias: Produto[] = []
+
+    produtosComValidade.forEach(produto => {
+      if (!produto.dataValidade) return
+
+      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
+      dataValidade.setHours(0, 0, 0, 0)
+      
+      const diasParaVencer = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+
+      if (diasParaVencer < 0) {
+        vencidos.push(produto)
+      } else if (diasParaVencer === 0) {
+        vencendoHoje.push(produto)
+      } else if (diasParaVencer <= 7) {
+        vencendoEm7Dias.push(produto)
+      } else if (diasParaVencer <= (produto.diasAlerta || 30)) {
+        vencendoEm30Dias.push(produto)
+      }
+    })
+
+    return { vencendoHoje, vencendoEm7Dias, vencendoEm30Dias, vencidos }
+  }
+
+  // Calcular faturamento mensal
+  const calcularFaturamentoMensal = () => {
+    if (!movimentacoes) return { totalFaturamento: 0, quantidadeVendas: 0, mesAno: '' }
+
+    const agora = new Date()
+    const anoAtual = agora.getFullYear()
+    const mesAtual = agora.getMonth()
+
+    const vendasMesAtual = movimentacoes.filter(mov => {
+      if (mov.tipo !== 'saida') return false
+
+      const [dia, mes, ano] = mov.data.split('/')
+      const dataMovimentacao = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia))
+
+      return dataMovimentacao.getFullYear() === anoAtual &&
+             dataMovimentacao.getMonth() === mesAtual
+    })
+
+    const totalFaturamento = vendasMesAtual.reduce((total, mov) => total + mov.valorTotal, 0)
+    const quantidadeVendas = vendasMesAtual.length
+
+    return {
+      totalFaturamento,
+      quantidadeVendas,
+      mesAno: agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    }
+  }
+
+  // Calcular estatísticas
+  const produtosAtivos = produtos ? produtos.filter(p => p.ativo) : []
+  const produtosEstoqueBaixo = produtosAtivos.filter(p => p.estoque <= p.estoqueMinimo)
+  const produtosEstoqueZerado = produtosAtivos.filter(p => p.estoque === 0)
+
+  // Alertas de validade
+  const alertasValidade = verificarProdutosVencimento()
+  const totalProdutosComProblemaValidade = alertasValidade.vencidos.length + 
+                                          alertasValidade.vencendoHoje.length + 
+                                          alertasValidade.vencendoEm7Dias.length
+
+  // Faturamento mensal
+  const faturamentoMensal = calcularFaturamentoMensal()
+
+  // Valor total do estoque
+  const valorTotalEstoque = produtosAtivos.reduce((total, produto) => {
+    return total + (produto.estoque * produto.valorCompra)
+  }, 0)
+
+  // 🆕 Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
-  // Carregar preferência de collapse do localStorage
   useEffect(() => {
-    const savedCollapsed = localStorage.getItem('stockpro_sidebar_collapsed')
-    if (savedCollapsed !== null) {
-      setSidebarCollapsed(JSON.parse(savedCollapsed))
+    // Escutar mudanças no localStorage para sincronizar
+    const handleStorageChange = () => {
+      const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+      if (collapsed !== null) {
+        setSidebarCollapsed(JSON.parse(collapsed))
+      }
+    }
+
+    // Verificar estado inicial
+    handleStorageChange()
+
+    // Escutar mudanças
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Polling para mudanças na mesma aba (workaround)
+    const interval = setInterval(handleStorageChange, 100)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
     }
   }, [])
 
-  // Salvar preferência no localStorage
-  const toggleSidebar = () => {
-    const newState = !sidebarCollapsed
-    setSidebarCollapsed(newState)
-    localStorage.setItem('stockpro_sidebar_collapsed', JSON.stringify(newState))
-  }
-
-  const menuItems = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: '📊',
-      description: 'Visão geral do negócio'
-    },
-    {
-      name: 'Produtos',
-      href: '/produtos',
-      icon: '📦',
-      description: 'Gestão de produtos'
-    },
-    {
-      name: 'Categorias',
-      href: '/categorias',
-      icon: '📂',
-      description: 'Organizar produtos'
-    },
-    {
-      name: 'Clientes',
-      href: '/clientes',
-      icon: '👥',
-      description: 'Gestão de clientes'
-    },
-    {
-      name: 'Fornecedores',
-      href: '/fornecedores',
-      icon: '🏭',
-      description: 'Gestão de fornecedores'
-    },
-    {
-      name: 'PDV',
-      href: '/pdv',
-      icon: '💰',
-      description: 'Ponto de venda'
-    },
-    {
-      name: 'Movimentações',
-      href: '/movimentacoes',
-      icon: '📋',
-      description: 'Histórico de estoque'
-    },
-    {
-      name: 'Relatórios',
-      href: '/relatorios',
-      icon: '📈',
-      description: 'Análises e relatórios'
-    }
-  ]
-
-  const handleLogout = async () => {
-    try {
-      await logout()
-      router.push('/login')
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error)
-    }
-  }
-
-  const isCurrentPage = (href: string) => currentPage === href
-
   return (
-    <>
-      {/* Header Mobile */}
-      <div className="lg:hidden bg-white shadow-lg border-b border-gray-200 sticky top-0 z-40">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setMenuAberto(!menuAberto)}
-              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors duration-200"
-            >
-              <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 truncate">{title}</h1>
-              {userEmail && (
-                <p className="text-xs text-gray-500 truncate">{userEmail}</p>
-              )}
-            </div>
-          </div>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-100">
+        <MobileHeader 
+          title="Dashboard Principal" 
+          currentPage="/dashboard" 
+          userEmail={user?.email || undefined}
+        />
 
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-bold">
-                {userEmail?.charAt(0).toUpperCase() || 'U'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        {/* 🆕 Margem dinâmica baseada no estado da sidebar */}
+        <main className={`max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
+          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+        }`}>
 
-      {/* Menu Mobile Overlay */}
-      {menuAberto && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setMenuAberto(false)}>
-          <div className="bg-white w-80 h-full shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            {/* Header do Menu */}
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold">StockPro</h2>
-                  <p className="text-blue-100 text-sm">Sistema de Gestão</p>
+          {/* Loading State */}
+          {isDataLoading && (
+            <div className="bg-white rounded-xl shadow-xl p-8 sm:p-12 mb-6 animate-fade-in">
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative mb-6">
+                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-200 border-t-purple-600"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-purple-600 text-2xl">📊</span>
+                  </div>
                 </div>
+                <p className="text-gray-700 font-bold text-lg">Carregando dashboard...</p>
+                <p className="text-gray-500 text-sm mt-2">
+                  {user?.isMultiTenant ? 
+                    `Sincronizando dados da empresa (${user.companyName})` : 
+                    'Sincronizando dados do Firebase'
+                  }
+                </p>
+                
+                <div className="mt-6 flex space-x-2">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce"></div>
+                  <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isDataLoading && (
+            <div className="animate-fade-in">
+              {/* Boas-vindas */}
+              <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl shadow-xl p-6 mb-8 text-white">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">
+                      Bem-vindo ao StockPro! 🚀
+                    </h1>
+                    <p className="text-purple-100 mt-2 text-base sm:text-lg">
+                      Gerencie seu estoque de forma inteligente e eficiente
+                    </p>
+                    {user && (
+                      <div className="text-purple-200 text-sm mt-1 space-y-1">
+                        <p>Logado como: <span className="font-semibold">{user.email}</span></p>
+                        {user.isMultiTenant && user.companyName && (
+                          <p>Empresa: <span className="font-semibold">{user.companyName}</span></p>
+                        )}
+                        {user.isMultiTenant && (
+                          <p className="text-purple-300 text-xs">🏢 Sistema Multi-tenant • Dados isolados por empresa</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+                    <button
+                      onClick={() => router.push('/produtos')}
+                      className="px-6 py-3 bg-white text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-xl">➕</span>
+                      <span>Novo Produto</span>
+                    </button>
+                    <button
+                      onClick={() => router.push('/movimentacoes')}
+                      className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                    >
+                      <span className="text-xl">��</span>
+                      <span>Nova Movimentação</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cards de Estatísticas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+
+                {/* Total de Produtos */}
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-blue-100 text-sm">Total de Produtos</p>
+                      <p className="text-3xl font-bold">{produtosAtivos.length}</p>
+                      <p className="text-blue-100 text-xs">Produtos ativos</p>
+                    </div>
+                    <div className="text-4xl ml-3">📦</div>
+                  </div>
+                </div>
+
+                {/* Estoque Baixo */}
+                <div className="bg-gradient-to-r from-yellow-500 to-orange-500 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-yellow-100 text-sm">Estoque Baixo</p>
+                      <p className="text-3xl font-bold">{produtosEstoqueBaixo.length}</p>
+                      <p className="text-yellow-100 text-xs">Precisam reposição</p>
+                    </div>
+                    <div className="text-4xl ml-3">⚠️</div>
+                  </div>
+                </div>
+
+                {/* Estoque Zerado */}
+                <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-red-100 text-sm">Estoque Zerado</p>
+                      <p className="text-3xl font-bold">{produtosEstoqueZerado.length}</p>
+                      <p className="text-red-100 text-xs">Sem estoque</p>
+                    </div>
+                    <div className="text-4xl ml-3">🚫</div>
+                  </div>
+                </div>
+
+                {/* Alertas de Validade */}
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-purple-100 text-sm">Próx. Vencimento</p>
+                      <p className="text-3xl font-bold">{totalProdutosComProblemaValidade}</p>
+                      <p className="text-purple-100 text-xs">Requer atenção</p>
+                    </div>
+                    <div className="text-4xl ml-3">📅</div>
+                  </div>
+                </div>
+
+                {/* Faturamento Mensal */}
+                <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-green-100 text-sm">Faturamento</p>
+                      <p className="text-xl font-bold">R$ {faturamentoMensal.totalFaturamento.toFixed(2)}</p>
+                      <p className="text-green-100 text-xs">{faturamentoMensal.quantidadeVendas} vendas</p>
+                    </div>
+                    <div className="text-4xl ml-3">💰</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Alertas de Estoque */}
+              {(produtosEstoqueBaixo.length > 0 || produtosEstoqueZerado.length > 0 || totalProdutosComProblemaValidade > 0) && (
+                <div className="bg-white rounded-xl shadow-xl p-6 mb-8">
+                  <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
+                    🚨 Alertas Importantes
+                  </h3>
+
+                  <div className="space-y-6">
+                    {/* Produtos com estoque zerado */}
+                    {produtosEstoqueZerado.length > 0 && (
+                      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
+                        <h4 className="font-bold text-red-800 mb-3 flex items-center">
+                          🚫 Produtos sem estoque ({produtosEstoqueZerado.length})
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {produtosEstoqueZerado.slice(0, 6).map(produto => (
+                            <div key={produto.id} className="bg-white p-4 rounded-lg border border-red-200 hover:shadow-md transition-shadow">
+                              <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                              <p className="text-xs text-gray-500">#{produto.codigo}</p>
+                              <p className="text-xs text-red-600 font-bold">Estoque: 0</p>
+                            </div>
+                          ))}
+                        </div>
+                        {produtosEstoqueZerado.length > 6 && (
+                          <p className="text-red-600 text-sm mt-3 font-medium">
+                            +{produtosEstoqueZerado.length - 6} produtos também estão sem estoque
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Ações Rápidas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <button
-                  onClick={() => setMenuAberto(false)}
-                  className="p-2 rounded-lg bg-white bg-opacity-20 hover:bg-opacity-30 transition-colors duration-200"
+                  onClick={() => router.push('/produtos')}
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <div className="text-4xl mb-3">➕</div>
+                  <div className="font-bold text-xl">Novo Produto</div>
+                  <div className="text-blue-100 text-sm mt-2">Cadastrar item</div>
+                </button>
+
+                <button
+                  onClick={() => router.push('/movimentacoes')}
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-4xl mb-3">📦</div>
+                  <div className="font-bold text-xl">Nova Movimentação</div>
+                  <div className="text-green-100 text-sm mt-2">Entrada/Saída</div>
+                </button>
+
+                <button
+                  onClick={() => router.push('/pdv')}
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-4xl mb-3">💰</div>
+                  <div className="font-bold text-xl">PDV</div>
+                  <div className="text-purple-100 text-sm mt-2">Ponto de venda</div>
+                </button>
+
+                <button
+                  onClick={() => router.push('/relatorios')}
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-4xl mb-3">📊</div>
+                  <div className="font-bold text-xl">Relatórios</div>
+                  <div className="text-orange-100 text-sm mt-2">Análises</div>
                 </button>
               </div>
-            </div>
 
-            {/* User Info */}
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">
-                    {userEmail?.charAt(0).toUpperCase() || 'U'}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {userEmail || 'Usuário'}
-                  </p>
-                  <p className="text-xs text-gray-500">Administrador</p>
-                </div>
-              </div>
-            </div>
+              {/* Resumo do Estoque */}
+              <div className="bg-white rounded-xl shadow-xl p-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
+                  📊 Resumo do Estoque
+                </h3>
 
-            {/* Menu Items */}
-            <nav className="p-4">
-              <div className="space-y-2">
-                {menuItems.map((item) => (
-                  <button
-                    key={item.href}
-                    onClick={() => {
-                      router.push(item.href)
-                      setMenuAberto(false)
-                    }}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                      isCurrentPage(item.href)
-                        ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-500'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span className="text-xl">{item.icon}</span>
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-xs text-gray-500">{item.description}</div>
-                    </div>
-                    {isCurrentPage(item.href) && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </nav>
-
-            {/* Footer do Menu */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-gray-50">
-              <LoadingButton
-                onClick={handleLogout}
-                variant="danger"
-                size="md"
-                className="w-full"
-              >
-                🚪 Sair do Sistema
-              </LoadingButton>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sidebar Desktop */}
-      <div className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200 lg:shadow-lg transition-all duration-300 ease-in-out ${
-        sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
-      }`}>
-
-        {/* Header da Sidebar */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative">
-          <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            {/* Logo dinâmico - esconde completamente quando colapsado */}
-            {!sidebarCollapsed ? (
-              <>
-                <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                  <span className="text-xl font-bold">📦</span>
-                </div>
-                <div className="ml-3 transition-all duration-300">
-                  <h1 className="text-xl font-bold">StockPro</h1>
-                  <p className="text-blue-100 text-sm">Sistema de Gestão</p>
-                </div>
-              </>
-            ) : (
-              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold">S</span>
-              </div>
-            )}
-          </div>
-
-          {/* 🆕 Botão de Toggle MELHORADO */}
-          <button
-            onClick={toggleSidebar}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 group border border-white border-opacity-20 hover:border-opacity-40"
-            title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
-          >
-            {/* Seta dinâmica */}
-            <svg
-              className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-
-        {/* User Info Desktop */}
-        {!sidebarCollapsed && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50 transition-all duration-300">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold">
-                  {userEmail?.charAt(0).toUpperCase() || 'U'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {userEmail || 'Usuário'}
-                </p>
-                <p className="text-xs text-gray-500">Administrador</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* User Info Collapsed */}
-        {sidebarCollapsed && (
-          <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
-            <div
-              className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-              title={userEmail || 'Usuário'}
-            >
-              <span className="text-white font-bold text-sm">
-                {userEmail?.charAt(0).toUpperCase() || 'U'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation Desktop */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => (
-            <div key={item.href} className="relative group">
-              <button
-                onClick={() => router.push(item.href)}
-                className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg transition-all duration-200 ${
-                  isCurrentPage(item.href)
-                    ? 'bg-blue-100 text-blue-700 border-l-4 border-blue-500'
-                    : 'text-gray-700 hover:bg-gray-100'
-                } ${sidebarCollapsed ? 'justify-center' : ''}`}
-                title={sidebarCollapsed ? item.name : ''}
-              >
-                <span className={`text-xl ${sidebarCollapsed ? '' : 'flex-shrink-0'}`}>
-                  {item.icon}
-                </span>
-
-                {!sidebarCollapsed && (
-                  <div className="flex-1 text-left transition-all duration-300">
-                    <div className="font-medium">{item.name}</div>
-                    <div className="text-xs text-gray-500">{item.description}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="text-center p-6 bg-blue-50 rounded-xl border border-blue-200">
+                    <p className="text-3xl font-bold text-blue-600">{produtosAtivos.length}</p>
+                    <p className="text-blue-600 font-semibold">Produtos Ativos</p>
                   </div>
-                )}
 
-                {!sidebarCollapsed && isCurrentPage(item.href) && (
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                )}
-              </button>
+                  <div className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
+                    <p className="text-xl font-bold text-green-600">
+                      R$ {valorTotalEstoque.toFixed(2)}
+                    </p>
+                    <p className="text-green-600 font-semibold">Valor do Estoque</p>
+                  </div>
 
-              {/* Tooltip melhorado para sidebar colapsada */}
-              {sidebarCollapsed && (
-                <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl">
-                  <div className="font-medium">{item.name}</div>
-                  <div className="text-xs text-gray-300">{item.description}</div>
-                  <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
+                  <div className="text-center p-6 bg-purple-50 rounded-xl border border-purple-200">
+                    <p className="text-3xl font-bold text-purple-600">{movimentacoes?.length || 0}</p>
+                    <p className="text-purple-600 font-semibold">Total Movimentações</p>
+                  </div>
+
+                  <div className="text-center p-6 bg-orange-50 rounded-xl border border-orange-200">
+                    <p className="text-3xl font-bold text-orange-600">
+                      {Math.round(((produtosAtivos.length - produtosEstoqueBaixo.length) / Math.max(produtosAtivos.length, 1)) * 100)}%
+                    </p>
+                    <p className="text-orange-600 font-semibold">Estoque Saudável</p>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </nav>
+              </div>
 
-        {/* Footer Desktop */}
-        <div className={`p-2 border-t border-gray-200 bg-gray-50 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
-          {sidebarCollapsed ? (
-            <div className="relative group">
-              <button
-                onClick={handleLogout}
-                className="p-3 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
-                title="Sair do Sistema"
-              >
-                🚪
-              </button>
-              <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl">
-                <div className="font-medium">Sair do Sistema</div>
-                <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1 border-4 border-transparent border-r-gray-900"></div>
+              {/* Informações sobre o sistema */}
+              <div className="mt-8 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
+                <div className="flex items-start space-x-4">
+                  <div className="text-3xl">💡</div>
+                  <div>
+                    <h3 className="text-lg font-bold text-blue-800 mb-2">
+                      {user?.isMultiTenant ? 'Sistema Multi-tenant Ativo' : 'Sobre o Sistema'}
+                    </h3>
+                    <div className="text-sm text-blue-700 space-y-2">
+                      {user?.isMultiTenant ? (
+                        <>
+                          <p>• Os dados desta empresa estão <strong>completamente isolados</strong> de outras empresas</p>
+                          <p>• Cada empresa tem suas próprias collections no Firebase</p>
+                          <p>• Backup e sincronização automática em tempo real</p>
+                          <p>• Sistema seguro com autenticação por empresa</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>• O faturamento é calculado apenas com as <strong>vendas (saídas)</strong> do mês atual</p>
+                          <p>• Automaticamente zera todo dia 1º do mês para um novo ciclo</p>
+                          <p>• Para análises históricas, use a aba <strong>Relatórios</strong> com períodos personalizados</p>
+                          <p>• O lucro líquido detalhado está disponível nos relatórios</p>
+                        </>
+                      )}
+                      <p>• Todos os dados são sincronizados em tempo real com o Firebase</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          ) : (
-            <LoadingButton
-              onClick={handleLogout}
-              variant="danger"
-              size="md"
-              className="w-full"
-            >
-              🚪 Sair do Sistema
-            </LoadingButton>
           )}
-        </div>
+        </main>
       </div>
-    </>
+    </ProtectedRoute>
   )
 }
