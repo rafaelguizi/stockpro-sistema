@@ -378,25 +378,31 @@ export default function Produtos() {
   const { user } = useAuth()
   const toast = useToastContext()
   
-  // 🆕 ESTADO PARA CONTROLE DO MENU (ADAPTAÇÃO RESPONSIVA)
+  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
-  // 🆕 SINCRONIZAÇÃO COM LOCALSTORAGE (ADAPTAÇÃO RESPONSIVA)
   useEffect(() => {
-    const savedCollapsed = localStorage.getItem('stockpro_sidebar_collapsed')
-    if (savedCollapsed !== null) {
-      setSidebarCollapsed(JSON.parse(savedCollapsed))
-    }
-
-    // Listener para mudanças no localStorage
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'stockpro_sidebar_collapsed' && e.newValue !== null) {
-        setSidebarCollapsed(JSON.parse(e.newValue))
+    // Escutar mudanças no localStorage para sincronizar
+    const handleStorageChange = () => {
+      const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+      if (collapsed !== null) {
+        setSidebarCollapsed(JSON.parse(collapsed))
       }
     }
 
+    // Verificar estado inicial
+    handleStorageChange()
+
+    // Escutar mudanças
     window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
+    
+    // Polling para mudanças na mesma aba (workaround)
+    const interval = setInterval(handleStorageChange, 100)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
   }, [])
   
   // 🆕 HOOK PARA CATEGORIAS FIRESTORE
@@ -982,8 +988,8 @@ export default function Produtos() {
           userEmail={user?.email || undefined}
         />
 
-        {/* 🎯 MAIN COM ADAPTAÇÃO RESPONSIVA PARA O MENU */}
-        <main className={`max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out ${
+        {/* 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD) */}
+        <main className={`max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
           sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
         }`}>
 
