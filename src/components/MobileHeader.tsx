@@ -238,12 +238,12 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
           {/* 🆕 Botão de Toggle MELHORADO COM EMOJI */}
           <button
             onClick={toggleSidebar}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 group border border-white border-opacity-20 hover:border-opacity-40"
+            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200"
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
-            {/* Emoji dinâmico */}
-            <span className={`text-sm transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}>
-              ◀️
+            {/* Emoji condicional - sem rotação */}
+            <span className="text-lg transition-all duration-200">
+              {sidebarCollapsed ? '▶️' : '◀️'}
             </span>
           </button>
         </div>
