@@ -17,7 +17,7 @@ interface UserData {
 
 export default function ChangePasswordPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, logout } = useAuth() // ✅ Adicionar logout
   const toast = useToastContext()
   
   const [loading, setLoading] = useState(true)
@@ -76,8 +76,8 @@ export default function ChangePasswordPage() {
 
         // Se não precisa alterar senha, redireciona para dashboard
         if (!foundUserData.mustChangePassword) {
-          console.log('✅ Usuário não precisa alterar senha')
-          router.push('/')
+          console.log('✅ Usuário não precisa alterar senha - redirecionando')
+          router.push('/dashboard')
           return
         }
 
@@ -136,18 +136,17 @@ export default function ChangePasswordPage() {
         throw new Error('Firebase não inicializado ou usuário não autenticado')
       }
 
-      // ✅ Usar auth.currentUser ao invés do nosso user personalizado
       const firebaseUser = auth.currentUser
 
       // 1. Reautenticar com senha atual
       console.log('🔐 Reautenticando usuário...')
       const credential = EmailAuthProvider.credential(firebaseUser.email!, formData.currentPassword)
-      await reauthenticateWithCredential(firebaseUser, credential) // ✅ Agora usa o tipo correto
+      await reauthenticateWithCredential(firebaseUser, credential)
       console.log('✅ Reautenticação realizada')
 
       // 2. Atualizar senha no Firebase Auth
       console.log('🔑 Atualizando senha no Firebase Auth...')
-      await updatePassword(firebaseUser, formData.newPassword) // ✅ Usa firebaseUser
+      await updatePassword(firebaseUser, formData.newPassword)
       console.log('✅ Senha atualizada no Auth')
 
       // 3. Marcar que não precisa mais alterar senha
@@ -161,11 +160,22 @@ export default function ChangePasswordPage() {
         console.log('✅ Flag atualizada no Firestore')
       }
 
-      toast.success('Senha alterada!', 'Agora você pode acessar o sistema normalmente')
+      toast.success('Senha alterada!', 'Redirecionando para o sistema...')
       
-      // Aguardar um pouco e redirecionar
-      setTimeout(() => {
-        router.push('/')
+      // ✅ SOLUÇÃO: Forçar logout e login para limpar cache
+      console.log('🔄 Fazendo logout/login para limpar cache...')
+      
+      setTimeout(async () => {
+        try {
+          // Logout completo
+          await logout()
+          // Redirect para login com flag de sucesso
+          window.location.href = `/login?passwordChanged=true&email=${encodeURIComponent(firebaseUser.email!)}`
+        } catch (error) {
+          console.error('Erro no logout:', error)
+          // Fallback - redirect direto
+          window.location.href = '/dashboard'
+        }
       }, 1500)
 
     } catch (error: any) {
