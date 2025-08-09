@@ -217,8 +217,8 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
         {/* Header da Sidebar */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative">
           <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            {/* Logo dinâmico - esconde completamente quando colapsado */}
-            {!sidebarCollapsed ? (
+            {/* 🆕 Logo APENAS quando expandido - SEM "S" quando minimizado */}
+            {!sidebarCollapsed && (
               <>
                 <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
                   <span className="text-xl font-bold">📦</span>
@@ -228,18 +228,14 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
                   <p className="text-blue-100 text-sm">Sistema de Gestão</p>
                 </div>
               </>
-            ) : (
-              <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold">S</span>
-              </div>
             )}
           </div>
 
-          {/* 🆕 Botão de Toggle VERSÃO 2 - ZERO FUNDO BRANCO */}
+          {/* 🆕 Botão de Toggle - Posição ajustada para quando não há logo */}
           <button
             onClick={toggleSidebar}
             className={`absolute rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 ${
-              sidebarCollapsed ? 'top-3 right-3' : 'top-4 right-4 p-2'
+              sidebarCollapsed ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2' : 'top-4 right-4 p-2'
             }`}
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
