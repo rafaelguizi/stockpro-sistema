@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import LoadingButton from './LoadingButton'
+import LoadingButton from '@/components/LoadingButton'
 
 interface MobileHeaderProps {
   title: string
