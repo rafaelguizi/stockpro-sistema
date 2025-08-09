@@ -234,8 +234,8 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
           {/* 🆕 Botão de Toggle - Posição ajustada para quando não há logo */}
           <button
             onClick={toggleSidebar}
-            className={`absolute rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 ${
-              sidebarCollapsed ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2' : 'top-4 right-4 p-2'
+            className={`absolute rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 p-2 ${
+              sidebarCollapsed ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2' : 'top-4 right-4'
             }`}
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
