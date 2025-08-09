@@ -235,22 +235,16 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
             )}
           </div>
 
-          {/* 🆕 Botão de Toggle MELHORADO */}
+          {/* 🆕 Botão de Toggle MELHORADO COM EMOJI */}
           <button
             onClick={toggleSidebar}
             className="absolute top-4 right-4 p-2 rounded-lg bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 group border border-white border-opacity-20 hover:border-opacity-40"
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
-            {/* Seta dinâmica */}
-            <svg
-              className={`w-4 h-4 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+            {/* Emoji dinâmico */}
+            <span className={`text-sm transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}>
+              ◀️
+            </span>
           </button>
         </div>
 
