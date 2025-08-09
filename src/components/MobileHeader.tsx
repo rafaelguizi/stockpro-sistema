@@ -235,11 +235,11 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
             )}
           </div>
 
-          {/* 🆕 Botão de Toggle MELHORADO COM EMOJI - SEM QUADRADO BRANCO */}
+          {/* 🆕 Botão de Toggle VERSÃO 2 - ZERO FUNDO BRANCO */}
           <button
             onClick={toggleSidebar}
-            className={`absolute top-4 right-4 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 ${
-              sidebarCollapsed ? 'p-1' : 'p-2'
+            className={`absolute rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 ${
+              sidebarCollapsed ? 'top-3 right-3' : 'top-4 right-4 p-2'
             }`}
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
