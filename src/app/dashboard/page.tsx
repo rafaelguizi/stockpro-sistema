@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { useMultiTenantFirestore } from '@/hooks/useMultiTenantFirestore'
+import { useFirestore } from '@/hooks/useFirestore'
 import { useToastContext } from '@/components/ToastProvider'
 import MobileHeader from '@/components/MobileHeader'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -49,8 +49,8 @@ export default function Dashboard() {
   const toast = useToastContext()
   
   // 🆕 Hooks Multi-tenant
-  const { data: produtos, loading: loadingProdutos } = useMultiTenantFirestore<Produto>('produtos')
-  const { data: movimentacoes, loading: loadingMovimentacoes } = useMultiTenantFirestore<Movimentacao>('movimentacoes')
+  const { data: produtos, loading: loadingProdutos } = useFirestore<Produto>('produtos')
+  const { data: movimentacoes, loading: loadingMovimentacoes } = useFirestore<Movimentacao>('movimentacoes')
 
   const [loading, setLoading] = useState(true)
 
