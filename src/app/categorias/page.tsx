@@ -353,8 +353,10 @@ export default function Categorias() {
         />
 
         {/* 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD) */}
-        <main className={`max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
-          sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
+        <main className={`py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
+          sidebarCollapsed
+           ? 'lg:ml-16 lg:mr-4'
+           : 'max-w-7xl mx-auto lg:ml-64'
         }`}>
           
           {/* Loading inicial */}
