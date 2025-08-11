@@ -425,6 +425,33 @@ export default function Movimentacoes() {
   const router = useRouter()
   const { user } = useAuth()
   const toast = useToastContext()
+
+  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+  // Escutar mudanças no localStorage para sincronizar
+  const handleStorageChange = () => {
+    const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+    if (collapsed !== null) {
+      setSidebarCollapsed(JSON.parse(collapsed))
+    }
+  }
+
+  // Verificar estado inicial
+  handleStorageChange()
+
+  // Escutar mudanças
+  window.addEventListener('storage', handleStorageChange)
+  
+  // Polling para mudanças na mesma aba (workaround)
+  const interval = setInterval(handleStorageChange, 100)
+
+  return () => {
+    window.removeEventListener('storage', handleStorageChange)
+    clearInterval(interval)
+  }
+}, [])
   
   // 🆕 HOOK PARA CATEGORIAS FIRESTORE
   const { 
@@ -821,7 +848,11 @@ export default function Movimentacoes() {
           userEmail={user?.email || undefined}
         />
 
-        <main className="max-w-7xl mx-auto py-4 sm:py-6 px-4 sm:px-6 lg:px-8 lg:ml-64">
+        <main className={`py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
+          sidebarCollapsed
+           ? 'lg:ml-16 lg:mr-4'
+           : 'max-w-7xl mx-auto lg:ml-64'
+        }`}>
           
           {/* Loading de carregamento inicial */}
           {isLoadingData && (
