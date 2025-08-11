@@ -137,9 +137,39 @@ export default function Dashboard() {
 
   // Alertas de validade
   const alertasValidade = verificarProdutosVencimento()
+  
+  // 🛠️ CORREÇÃO 1: INCLUIR vencendoEm30Dias na contagem
   const totalProdutosComProblemaValidade = alertasValidade.vencidos.length + 
                                           alertasValidade.vencendoHoje.length + 
-                                          alertasValidade.vencendoEm7Dias.length
+                                          alertasValidade.vencendoEm7Dias.length +
+                                          alertasValidade.vencendoEm30Dias.length // 🆕 ADICIONADO
+
+  // 🔍 DEBUG TEMPORÁRIO - REMOVER DEPOIS DE TESTAR
+  console.log('🚨 DEBUG Alertas:', {
+    totalProdutos: produtosAtivos.length,
+    produtosEstoqueBaixo: produtosEstoqueBaixo.length,
+    produtosEstoqueZerado: produtosEstoqueZerado.length,
+    alertasValidade: {
+      vencidos: alertasValidade.vencidos.length,
+      vencendoHoje: alertasValidade.vencendoHoje.length,
+      vencendoEm7Dias: alertasValidade.vencendoEm7Dias.length,
+      vencendoEm30Dias: alertasValidade.vencendoEm30Dias.length
+    },
+    totalProblemasValidade: totalProdutosComProblemaValidade
+  })
+
+  console.log('📦 Produtos estoque baixo:', produtosEstoqueBaixo.map(p => ({
+    nome: p.nome,
+    estoque: p.estoque,
+    minimo: p.estoqueMinimo
+  })))
+
+  console.log('📅 Produtos com validade:', produtosAtivos.filter(p => p.temValidade).map(p => ({
+    nome: p.nome,
+    temValidade: p.temValidade,
+    dataValidade: p.dataValidade,
+    diasAlerta: p.diasAlerta
+  })))
 
   // Faturamento mensal
   const faturamentoMensal = calcularFaturamentoMensal()
@@ -238,7 +268,7 @@ export default function Dashboard() {
                           <p>Empresa: <span className="font-semibold">{user.companyName}</span></p>
                         )}
                         {user.isMultiTenant && (
-                          <p className="text-purple-300 text-xs">🏢 Sistema Multi-tenant • Dados isolados por empresa</p>
+                          <p className="text-purple-300 text-xs">🏢 Dados isolados por empresa</p>
                         )}
                       </div>
                     )}
@@ -256,7 +286,7 @@ export default function Dashboard() {
                       onClick={() => router.push('/movimentacoes')}
                       className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
                     >
-                      <span className="text-xl">��</span>
+                      <span className="text-xl">📦</span>
                       <span>Nova Movimentação</span>
                     </button>
                   </div>
@@ -327,7 +357,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Alertas de Estoque */}
+              {/* 🛠️ CORREÇÃO 2: SEÇÃO COMPLETA DE ALERTAS */}
               {(produtosEstoqueBaixo.length > 0 || produtosEstoqueZerado.length > 0 || totalProdutosComProblemaValidade > 0) && (
                 <div className="bg-white rounded-xl shadow-xl p-6 mb-8">
                   <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
@@ -335,6 +365,31 @@ export default function Dashboard() {
                   </h3>
 
                   <div className="space-y-6">
+                    {/* 🆕 PRODUTOS COM ESTOQUE BAIXO */}
+                    {produtosEstoqueBaixo.length > 0 && (
+                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-5">
+                        <h4 className="font-bold text-yellow-800 mb-3 flex items-center">
+                          ⚠️ Produtos com estoque baixo ({produtosEstoqueBaixo.length})
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {produtosEstoqueBaixo.slice(0, 6).map(produto => (
+                            <div key={produto.id} className="bg-white p-4 rounded-lg border border-yellow-200 hover:shadow-md transition-shadow">
+                              <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                              <p className="text-xs text-gray-500">#{produto.codigo}</p>
+                              <p className="text-xs text-yellow-600 font-bold">
+                                Estoque: {produto.estoque} (Mín: {produto.estoqueMinimo})
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        {produtosEstoqueBaixo.length > 6 && (
+                          <p className="text-yellow-600 text-sm mt-3 font-medium">
+                            +{produtosEstoqueBaixo.length - 6} produtos também estão com estoque baixo
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {/* Produtos com estoque zerado */}
                     {produtosEstoqueZerado.length > 0 && (
                       <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
@@ -354,6 +409,90 @@ export default function Dashboard() {
                           <p className="text-red-600 text-sm mt-3 font-medium">
                             +{produtosEstoqueZerado.length - 6} produtos também estão sem estoque
                           </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 🆕 ALERTAS DE VALIDADE COMPLETOS */}
+                    {(alertasValidade.vencidos.length > 0 || alertasValidade.vencendoHoje.length > 0 || 
+                      alertasValidade.vencendoEm7Dias.length > 0 || alertasValidade.vencendoEm30Dias.length > 0) && (
+                      <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
+                        <h4 className="font-bold text-orange-800 mb-3 flex items-center">
+                          📅 Alertas de Validade ({totalProdutosComProblemaValidade})
+                        </h4>
+                        
+                        {/* Produtos vencidos */}
+                        {alertasValidade.vencidos.length > 0 && (
+                          <div className="mb-4">
+                            <h5 className="font-semibold text-red-700 mb-2">🚨 Vencidos ({alertasValidade.vencidos.length})</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {alertasValidade.vencidos.slice(0, 3).map(produto => (
+                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-red-200">
+                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                  <p className="text-xs text-red-600">🚨 Vencido</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Produtos vencendo hoje */}
+                        {alertasValidade.vencendoHoje.length > 0 && (
+                          <div className="mb-4">
+                            <h5 className="font-semibold text-orange-700 mb-2">⏰ Vencem hoje ({alertasValidade.vencendoHoje.length})</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {alertasValidade.vencendoHoje.slice(0, 3).map(produto => (
+                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-orange-200">
+                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                  <p className="text-xs text-orange-600">⏰ Vence hoje</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Produtos vencendo em 7 dias */}
+                        {alertasValidade.vencendoEm7Dias.length > 0 && (
+                          <div className="mb-4">
+                            <h5 className="font-semibold text-yellow-700 mb-2">📅 Vencem em até 7 dias ({alertasValidade.vencendoEm7Dias.length})</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {alertasValidade.vencendoEm7Dias.slice(0, 3).map(produto => (
+                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-yellow-200">
+                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                  <p className="text-xs text-yellow-600">
+                                    {(() => {
+                                      const hoje = new Date()
+                                      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
+                                      const dias = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+                                      return `📅 ${dias} dias restantes`
+                                    })()}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Produtos vencendo em 30 dias */}
+                        {alertasValidade.vencendoEm30Dias.length > 0 && (
+                          <div className="mb-4">
+                            <h5 className="font-semibold text-blue-700 mb-2">📋 Vencem em até 30 dias ({alertasValidade.vencendoEm30Dias.length})</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {alertasValidade.vencendoEm30Dias.slice(0, 3).map(produto => (
+                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-blue-200">
+                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                  <p className="text-xs text-blue-600">
+                                    {(() => {
+                                      const hoje = new Date()
+                                      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
+                                      const dias = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+                                      return `📅 ${dias} dias restantes`
+                                    })()}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
@@ -439,13 +578,12 @@ export default function Dashboard() {
                   <div className="text-3xl">💡</div>
                   <div>
                     <h3 className="text-lg font-bold text-blue-800 mb-2">
-                      {user?.isMultiTenant ? 'Sistema Multi-tenant Ativo' : 'Sobre o Sistema'}
+                      {user?.isMultiTenant ? '' : 'Sobre o Sistema'}
                     </h3>
                     <div className="text-sm text-blue-700 space-y-2">
                       {user?.isMultiTenant ? (
                         <>
                           <p>• Os dados desta empresa estão <strong>completamente isolados</strong> de outras empresas</p>
-                          <p>• Cada empresa tem suas próprias collections no Firebase</p>
                           <p>• Backup e sincronização automática em tempo real</p>
                           <p>• Sistema seguro com autenticação por empresa</p>
                         </>
