@@ -66,12 +66,52 @@ export default function Dashboard() {
   // Aguardar dados do Firebase
   const isDataLoading = loading || loadingProdutos || loadingMovimentacoes
 
-  // Função para verificar produtos próximos do vencimento
-  const verificarProdutosVencimento = () => {
-    if (!produtos) return { vencendoHoje: [], vencendoEm7Dias: [], vencendoEm30Dias: [], vencidos: [] }
+  // 🛠️ FUNÇÃO VERIFICAR VALIDADE CORRIGIDA - IGUAL AOS PRODUTOS
+  const verificarValidade = (produto: Produto) => {
+    if (!produto.temValidade || !produto.dataValidade) {
+      return { status: 'sem_validade', diasRestantes: null, textoVencimento: 'Sem validade' }
+    }
 
     const hoje = new Date()
     hoje.setHours(0, 0, 0, 0)
+    
+    const [ano, mes, dia] = produto.dataValidade.split('-').map(Number)
+    const dataValidade = new Date(ano, mes - 1, dia)
+    dataValidade.setHours(0, 0, 0, 0)
+    
+    const diasRestantes = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+    const diasAlerta = produto.diasAlerta || 30
+
+    let textoVencimento: string
+    if (diasRestantes < 0) {
+      textoVencimento = `Vencido há ${Math.abs(diasRestantes)} dia${Math.abs(diasRestantes) !== 1 ? 's' : ''}`
+    } else if (diasRestantes === 0) {
+      textoVencimento = 'Vence hoje'
+    } else if (diasRestantes === 1) {
+      textoVencimento = 'Vence amanhã'
+    } else {
+      textoVencimento = `Vence em ${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''}`
+    }
+
+    let status: string
+    if (diasRestantes < 0) {
+      status = 'vencido'
+    } else if (diasRestantes === 0) {
+      status = 'vence_hoje'
+    } else if (diasRestantes <= 7) {
+      status = 'vence_em_7_dias'
+    } else if (diasRestantes <= diasAlerta) {
+      status = 'proximo_vencimento'
+    } else {
+      status = 'valido'
+    }
+    
+    return { status, diasRestantes, textoVencimento }
+  }
+
+  // 🛠️ FUNÇÃO PARA VERIFICAR PRODUTOS PRÓXIMOS DO VENCIMENTO CORRIGIDA
+  const verificarProdutosVencimento = () => {
+    if (!produtos) return { vencendoHoje: [], vencendoEm7Dias: [], vencendoEm30Dias: [], vencidos: [] }
 
     const produtosComValidade = produtos.filter(p => p.ativo && p.temValidade && p.dataValidade)
 
@@ -81,21 +121,21 @@ export default function Dashboard() {
     const vencendoEm30Dias: Produto[] = []
 
     produtosComValidade.forEach(produto => {
-      if (!produto.dataValidade) return
+      const validadeInfo = verificarValidade(produto) // 🛠️ USAR A FUNÇÃO CORRIGIDA
 
-      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
-      dataValidade.setHours(0, 0, 0, 0)
-      
-      const diasParaVencer = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-
-      if (diasParaVencer < 0) {
-        vencidos.push(produto)
-      } else if (diasParaVencer === 0) {
-        vencendoHoje.push(produto)
-      } else if (diasParaVencer <= 7) {
-        vencendoEm7Dias.push(produto)
-      } else if (diasParaVencer <= (produto.diasAlerta || 30)) {
-        vencendoEm30Dias.push(produto)
+      switch (validadeInfo.status) {
+        case 'vencido':
+          vencidos.push(produto)
+          break
+        case 'vence_hoje':
+          vencendoHoje.push(produto)
+          break
+        case 'vence_em_7_dias':
+          vencendoEm7Dias.push(produto)
+          break
+        case 'proximo_vencimento':
+          vencendoEm30Dias.push(produto)
+          break
       }
     })
 
@@ -142,34 +182,7 @@ export default function Dashboard() {
   const totalProdutosComProblemaValidade = alertasValidade.vencidos.length + 
                                           alertasValidade.vencendoHoje.length + 
                                           alertasValidade.vencendoEm7Dias.length +
-                                          alertasValidade.vencendoEm30Dias.length // 🆕 ADICIONADO
-
-  // 🔍 DEBUG TEMPORÁRIO - REMOVER DEPOIS DE TESTAR
-  console.log('🚨 DEBUG Alertas:', {
-    totalProdutos: produtosAtivos.length,
-    produtosEstoqueBaixo: produtosEstoqueBaixo.length,
-    produtosEstoqueZerado: produtosEstoqueZerado.length,
-    alertasValidade: {
-      vencidos: alertasValidade.vencidos.length,
-      vencendoHoje: alertasValidade.vencendoHoje.length,
-      vencendoEm7Dias: alertasValidade.vencendoEm7Dias.length,
-      vencendoEm30Dias: alertasValidade.vencendoEm30Dias.length
-    },
-    totalProblemasValidade: totalProdutosComProblemaValidade
-  })
-
-  console.log('📦 Produtos estoque baixo:', produtosEstoqueBaixo.map(p => ({
-    nome: p.nome,
-    estoque: p.estoque,
-    minimo: p.estoqueMinimo
-  })))
-
-  console.log('📅 Produtos com validade:', produtosAtivos.filter(p => p.temValidade).map(p => ({
-    nome: p.nome,
-    temValidade: p.temValidade,
-    dataValidade: p.dataValidade,
-    diasAlerta: p.diasAlerta
-  })))
+                                          alertasValidade.vencendoEm30Dias.length
 
   // Faturamento mensal
   const faturamentoMensal = calcularFaturamentoMensal()
@@ -286,7 +299,7 @@ export default function Dashboard() {
                       onClick={() => router.push('/movimentacoes')}
                       className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
                     >
-                      <span className="text-xl">📦</span>
+                      <span className="text-xl">��</span>
                       <span>Nova Movimentação</span>
                     </button>
                   </div>
@@ -357,7 +370,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* 🛠️ CORREÇÃO 2: SEÇÃO COMPLETA DE ALERTAS */}
+              {/* 🛠️ ALERTAS CORRIGIDOS - USO DIRETO DO textoVencimento */}
               {(produtosEstoqueBaixo.length > 0 || produtosEstoqueZerado.length > 0 || totalProdutosComProblemaValidade > 0) && (
                 <div className="bg-white rounded-xl shadow-xl p-6 mb-8">
                   <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
@@ -413,7 +426,7 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    {/* 🆕 ALERTAS DE VALIDADE COMPLETOS */}
+                    {/* 🛠️ ALERTAS DE VALIDADE CORRIGIDOS - USO DIRETO DO textoVencimento */}
                     {(alertasValidade.vencidos.length > 0 || alertasValidade.vencendoHoje.length > 0 || 
                       alertasValidade.vencendoEm7Dias.length > 0 || alertasValidade.vencendoEm30Dias.length > 0) && (
                       <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
@@ -426,12 +439,15 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-red-700 mb-2">🚨 Vencidos ({alertasValidade.vencidos.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencidos.slice(0, 3).map(produto => (
-                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-red-200">
-                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
-                                  <p className="text-xs text-red-600">🚨 Vencido</p>
-                                </div>
-                              ))}
+                              {alertasValidade.vencidos.slice(0, 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                                return (
+                                  <div key={produto.id} className="bg-white p-3 rounded-lg border border-red-200">
+                                    <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                    <p className="text-xs text-red-600">🚨 {validadeInfo.textoVencimento}</p>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         )}
@@ -441,12 +457,15 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-orange-700 mb-2">⏰ Vencem hoje ({alertasValidade.vencendoHoje.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoHoje.slice(0, 3).map(produto => (
-                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-orange-200">
-                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
-                                  <p className="text-xs text-orange-600">⏰ Vence hoje</p>
-                                </div>
-                              ))}
+                              {alertasValidade.vencendoHoje.slice(0, 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                                return (
+                                  <div key={produto.id} className="bg-white p-3 rounded-lg border border-orange-200">
+                                    <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                    <p className="text-xs text-orange-600">⏰ {validadeInfo.textoVencimento}</p>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         )}
@@ -456,19 +475,15 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-yellow-700 mb-2">📅 Vencem em até 7 dias ({alertasValidade.vencendoEm7Dias.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoEm7Dias.slice(0, 3).map(produto => (
-                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-yellow-200">
-                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
-                                  <p className="text-xs text-yellow-600">
-                                    {(() => {
-                                      const hoje = new Date()
-                                      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
-                                      const dias = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-                                      return `📅 ${dias} dias restantes`
-                                    })()}
-                                  </p>
-                                </div>
-                              ))}
+                              {alertasValidade.vencendoEm7Dias.slice(0, 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                                return (
+                                  <div key={produto.id} className="bg-white p-3 rounded-lg border border-yellow-200">
+                                    <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                    <p className="text-xs text-yellow-600">📅 {validadeInfo.textoVencimento}</p>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         )}
@@ -478,19 +493,15 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-blue-700 mb-2">📋 Vencem em até 30 dias ({alertasValidade.vencendoEm30Dias.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoEm30Dias.slice(0, 3).map(produto => (
-                                <div key={produto.id} className="bg-white p-3 rounded-lg border border-blue-200">
-                                  <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
-                                  <p className="text-xs text-blue-600">
-                                    {(() => {
-                                      const hoje = new Date()
-                                      const dataValidade = new Date(produto.dataValidade + 'T00:00:00')
-                                      const dias = Math.floor((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-                                      return `📅 ${dias} dias restantes`
-                                    })()}
-                                  </p>
-                                </div>
-                              ))}
+                              {alertasValidade.vencendoEm30Dias.slice(0, 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                                return (
+                                  <div key={produto.id} className="bg-white p-3 rounded-lg border border-blue-200">
+                                    <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
+                                    <p className="text-xs text-blue-600">�� {validadeInfo.textoVencimento}</p>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         )}
