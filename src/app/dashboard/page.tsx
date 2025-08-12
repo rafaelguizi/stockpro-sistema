@@ -511,45 +511,6 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Ações Rápidas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <button
-                  onClick={() => router.push('/produtos')}
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                >
-                  <div className="text-4xl mb-3">➕</div>
-                  <div className="font-bold text-xl">Novo Produto</div>
-                  <div className="text-blue-100 text-sm mt-2">Cadastrar item</div>
-                </button>
-
-                <button
-                  onClick={() => router.push('/movimentacoes')}
-                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                >
-                  <div className="text-4xl mb-3">📦</div>
-                  <div className="font-bold text-xl">Nova Movimentação</div>
-                  <div className="text-green-100 text-sm mt-2">Entrada/Saída</div>
-                </button>
-
-                <button
-                  onClick={() => router.push('/pdv')}
-                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                >
-                  <div className="text-4xl mb-3">💰</div>
-                  <div className="font-bold text-xl">PDV</div>
-                  <div className="text-purple-100 text-sm mt-2">Ponto de venda</div>
-                </button>
-
-                <button
-                  onClick={() => router.push('/relatorios')}
-                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white p-8 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-                >
-                  <div className="text-4xl mb-3">📊</div>
-                  <div className="font-bold text-xl">Relatórios</div>
-                  <div className="text-orange-100 text-sm mt-2">Análises</div>
-                </button>
-              </div>
-
               {/* Resumo do Estoque */}
               <div className="bg-white rounded-xl shadow-xl p-6">
                 <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
