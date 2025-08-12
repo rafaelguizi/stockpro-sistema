@@ -1696,6 +1696,735 @@ export default function Relatorios() {
             </>
           )}
 
+          {/* 📅 ABA DE CONTROLE DE VALIDADE */}
+          {!isLoadingData && abaAtiva === 'validade' && produtos && (
+            <>
+              {/* Resumo de Validade */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                
+                {/* Produtos Vencidos */}
+                <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-red-100 text-sm">Produtos Vencidos</p>
+                      <p className="text-3xl font-bold">{estatisticasValidade.vencidos.length}</p>
+                      <p className="text-red-100 text-xs">Ação imediata</p>
+                    </div>
+                    <div className="text-4xl ml-3">🚨</div>
+                  </div>
+                </div>
+
+                {/* Vencendo Hoje */}
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-orange-100 text-sm">Vencendo Hoje</p>
+                      <p className="text-3xl font-bold">{estatisticasValidade.vencendoHoje.length}</p>
+                      <p className="text-orange-100 text-xs">Urgente</p>
+                    </div>
+                    <div className="text-4xl ml-3">⏰</div>
+                  </div>
+                </div>
+
+                {/* Vencendo em 7 Dias */}
+                <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-yellow-100 text-sm">Vencendo em 7 Dias</p>
+                      <p className="text-3xl font-bold">{estatisticasValidade.vencendoEm7Dias.length}</p>
+                      <p className="text-yellow-100 text-xs">Atenção</p>
+                    </div>
+                    <div className="text-4xl ml-3">📅</div>
+                  </div>
+                </div>
+
+                {/* Próximo Vencimento */}
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-blue-100 text-sm">Próx. Vencimento</p>
+                      <p className="text-3xl font-bold">{estatisticasValidade.proximoVencimento.length}</p>
+                      <p className="text-blue-100 text-xs">Monitorar</p>
+                    </div>
+                    <div className="text-4xl ml-3">⚠️</div>
+                  </div>
+                </div>
+
+                {/* Valor Perdido */}
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-purple-100 text-sm">Valor Perdido</p>
+                      <p className="text-2xl font-bold">R$ {estatisticasValidade.valorPerdido.toFixed(2)}</p>
+                      <p className="text-purple-100 text-xs">Produtos vencidos</p>
+                    </div>
+                    <div className="text-4xl ml-3">💸</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lista de Produtos por Status de Validade */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                
+                {/* Produtos Vencidos */}
+                {estatisticasValidade.vencidos.length > 0 && (
+                  <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-lg font-bold mb-4 text-red-600 ${modoNoturno ? 'text-red-400' : ''}`}>
+                      🚨 Produtos Vencidos ({estatisticasValidade.vencidos.length})
+                    </h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {estatisticasValidade.vencidos.map((produto) => {
+                        const dadosCategoria = obterDadosCategoria(produto)
+                        const validadeInfo = verificarValidade(produto)
+                        
+                        return (
+                          <div key={produto.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                  style={{ backgroundColor: dadosCategoria.cor }}
+                                >
+                                  {dadosCategoria.icone}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                  <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                                  <p className="text-sm text-red-600 font-medium">
+                                    Vencido há {Math.abs(validadeInfo.diasRestantes || 0)} dia(s)
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-600">Estoque: {produto.estoque}</p>
+                                <p className="text-sm text-red-600 font-bold">
+                                  Perda: R$ {(produto.estoque * produto.valorCompra).toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Produtos Vencendo Hoje */}
+                {estatisticasValidade.vencendoHoje.length > 0 && (
+                  <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-lg font-bold mb-4 text-orange-600 ${modoNoturno ? 'text-orange-400' : ''}`}>
+                      ⏰ Vencendo Hoje ({estatisticasValidade.vencendoHoje.length})
+                    </h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {estatisticasValidade.vencendoHoje.map((produto) => {
+                        const dadosCategoria = obterDadosCategoria(produto)
+                        
+                        return (
+                          <div key={produto.id} className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                  style={{ backgroundColor: dadosCategoria.cor }}
+                                >
+                                  {dadosCategoria.icone}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                  <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                                  <p className="text-sm text-orange-600 font-medium">Vence hoje</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-600">Estoque: {produto.estoque}</p>
+                                <p className="text-sm text-orange-600">
+                                  Valor: R$ {(produto.estoque * produto.valorCompra).toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Produtos Vencendo em 7 Dias */}
+                {estatisticasValidade.vencendoEm7Dias.length > 0 && (
+                  <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-lg font-bold mb-4 text-yellow-600 ${modoNoturno ? 'text-yellow-400' : ''}`}>
+                      📅 Vencendo em até 7 Dias ({estatisticasValidade.vencendoEm7Dias.length})
+                    </h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {estatisticasValidade.vencendoEm7Dias.map((produto) => {
+                        const dadosCategoria = obterDadosCategoria(produto)
+                        const validadeInfo = verificarValidade(produto)
+                        
+                        return (
+                          <div key={produto.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                  style={{ backgroundColor: dadosCategoria.cor }}
+                                >
+                                  {dadosCategoria.icone}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                  <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                                  <p className="text-sm text-yellow-600 font-medium">
+                                    Vence em {validadeInfo.diasRestantes} dia(s)
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-600">Estoque: {produto.estoque}</p>
+                                <p className="text-sm text-yellow-600">
+                                  Valor: R$ {(produto.estoque * produto.valorCompra).toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Produtos Próximos do Vencimento */}
+                {estatisticasValidade.proximoVencimento.length > 0 && (
+                  <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                    <h3 className={`text-lg font-bold mb-4 text-blue-600 ${modoNoturno ? 'text-blue-400' : ''}`}>
+                      ⚠️ Próximo do Vencimento ({estatisticasValidade.proximoVencimento.length})
+                    </h3>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {estatisticasValidade.proximoVencimento.slice(0, 10).map((produto) => {
+                        const dadosCategoria = obterDadosCategoria(produto)
+                        const validadeInfo = verificarValidade(produto)
+                        
+                        return (
+                          <div key={produto.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                  style={{ backgroundColor: dadosCategoria.cor }}
+                                >
+                                  {dadosCategoria.icone}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                  <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                                  <p className="text-sm text-blue-600 font-medium">
+                                    Vence em {validadeInfo.diasRestantes} dia(s)
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-gray-600">Estoque: {produto.estoque}</p>
+                                <p className="text-sm text-blue-600">
+                                  Valor: R$ {(produto.estoque * produto.valorCompra).toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {estatisticasValidade.proximoVencimento.length > 10 && (
+                        <div className="text-center py-4">
+                          <p className="text-gray-500 text-sm">
+                            +{estatisticasValidade.proximoVencimento.length - 10} produtos não exibidos
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Dicas de Validade */}
+              <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
+                  💡 Dicas para Gestão de Validade
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">🚨</div>
+                      <div>
+                        <h4 className={`font-bold ${modoNoturno ? 'text-red-400' : 'text-red-600'}`}>Produtos Vencidos</h4>
+                        <p className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Remova imediatamente do estoque. Considere promoções antes do vencimento.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">⏰</div>
+                      <div>
+                        <h4 className={`font-bold ${modoNoturno ? 'text-orange-400' : 'text-orange-600'}`}>Vencendo Hoje</h4>
+                        <p className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Últimas horas para venda. Ofereça desconto especial.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">📅</div>
+                      <div>
+                        <h4 className={`font-bold ${modoNoturno ? 'text-yellow-400' : 'text-yellow-600'}`}>7 Dias ou Menos</h4>
+                        <p className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Faça promoção urgente. Priorize nas vendas.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <div className="text-2xl">⚠️</div>
+                      <div>
+                        <h4 className={`font-bold ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>Próximo Vencimento</h4>
+                        <p className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Monitore regularmente. Planeje promoções futuras.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 📦 ABA DE ANÁLISE DE ESTOQUE */}
+          {!isLoadingData && abaAtiva === 'estoque' && produtos && (
+            <>
+              {/* Resumo de Estoque */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                
+                {/* Total de Produtos */}
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-blue-100 text-sm">Total Produtos</p>
+                      <p className="text-3xl font-bold">{produtos.filter(p => p.ativo).length}</p>
+                      <p className="text-blue-100 text-xs">Ativos</p>
+                    </div>
+                    <div className="text-4xl ml-3">📦</div>
+                  </div>
+                </div>
+
+                {/* Estoque Zerado */}
+                <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-red-100 text-sm">Estoque Zerado</p>
+                      <p className="text-3xl font-bold">{produtos.filter(p => p.ativo && p.estoque === 0).length}</p>
+                      <p className="text-red-100 text-xs">Sem estoque</p>
+                    </div>
+                    <div className="text-4xl ml-3">🚫</div>
+                  </div>
+                </div>
+
+                {/* Estoque Baixo */}
+                <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-yellow-100 text-sm">Estoque Baixo</p>
+                      <p className="text-3xl font-bold">{produtos.filter(p => p.ativo && p.estoque > 0 && p.estoque <= p.estoqueMinimo).length}</p>
+                      <p className="text-yellow-100 text-xs">Reabastecer</p>
+                    </div>
+                    <div className="text-4xl ml-3">⚠️</div>
+                  </div>
+                </div>
+
+                {/* Estoque Normal */}
+                <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-green-100 text-sm">Estoque Normal</p>
+                      <p className="text-3xl font-bold">{produtos.filter(p => p.ativo && p.estoque > p.estoqueMinimo).length}</p>
+                      <p className="text-green-100 text-xs">Adequado</p>
+                    </div>
+                    <div className="text-4xl ml-3">✅</div>
+                  </div>
+                </div>
+
+                {/* Valor Total */}
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-purple-100 text-sm">Valor Estoque</p>
+                      <p className="text-2xl font-bold">R$ {produtos.filter(p => p.ativo).reduce((total, produto) => total + (produto.estoque * produto.valorCompra), 0).toFixed(2)}</p>
+                      <p className="text-purple-100 text-xs">Investido</p>
+                    </div>
+                    <div className="text-4xl ml-3">💰</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Análises de Estoque */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                
+                {/* Produtos com Estoque Zerado */}
+                <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-lg font-bold mb-4 text-red-600 ${modoNoturno ? 'text-red-400' : ''}`}>
+                    🚫 Produtos sem Estoque ({produtos.filter(p => p.ativo && p.estoque === 0).length})
+                  </h3>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {produtos.filter(p => p.ativo && p.estoque === 0).slice(0, 10).map((produto) => {
+                      const dadosCategoria = obterDadosCategoria(produto)
+                      
+                      return (
+                        <div key={produto.id} className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                style={{ backgroundColor: dadosCategoria.cor }}
+                              >
+                                {dadosCategoria.icone}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-red-600 font-bold">Estoque: 0</p>
+                              <p className="text-sm text-gray-600">Mín: {produto.estoqueMinimo}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Produtos com Estoque Baixo */}
+                <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-lg font-bold mb-4 text-yellow-600 ${modoNoturno ? 'text-yellow-400' : ''}`}>
+                    ⚠️ Estoque Baixo ({produtos.filter(p => p.ativo && p.estoque > 0 && p.estoque <= p.estoqueMinimo).length})
+                  </h3>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {produtos.filter(p => p.ativo && p.estoque > 0 && p.estoque <= p.estoqueMinimo).slice(0, 10).map((produto) => {
+                      const dadosCategoria = obterDadosCategoria(produto)
+                      
+                      return (
+                        <div key={produto.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm"
+                                style={{ backgroundColor: dadosCategoria.cor }}
+                              >
+                                {dadosCategoria.icone}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{produto.nome}</p>
+                                <p className="text-sm text-gray-600">#{produto.codigo} • {dadosCategoria.nome}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-yellow-600 font-bold">Estoque: {produto.estoque}</p>
+                              <p className="text-sm text-gray-600">Mín: {produto.estoqueMinimo}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Estoque por Categoria */}
+                <div className={`p-6 rounded-xl shadow-lg lg:col-span-2 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
+                    📊 Estoque por Categoria
+                  </h3>
+                  <div className="space-y-3">
+                    {(() => {
+                      const estoquePorCategoria = produtos.filter(p => p.ativo).reduce((acc, produto) => {
+                        const dadosCategoria = obterDadosCategoria(produto)
+                        const nomeCategoria = dadosCategoria.nome
+                        
+                        if (!acc[nomeCategoria]) {
+                          acc[nomeCategoria] = {
+                            quantidade: 0,
+                            valor: 0,
+                            produtos: 0,
+                            dadosCategoria
+                          }
+                        }
+                        
+                        acc[nomeCategoria].quantidade += produto.estoque
+                        acc[nomeCategoria].valor += produto.estoque * produto.valorCompra
+                        acc[nomeCategoria].produtos += 1
+                        
+                        return acc
+                      }, {} as Record<string, any>)
+
+                      return Object.entries(estoquePorCategoria)
+                        .sort(([,a], [,b]) => b.valor - a.valor)
+                        .map(([categoria, dados]) => (
+                          <div key={categoria} className={`p-4 rounded-lg ${modoNoturno ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div
+                                  className="w-10 h-10 rounded-lg flex items-center justify-center text-white"
+                                  style={{ backgroundColor: dados.dadosCategoria.cor }}
+                                >
+                                  {dados.dadosCategoria.icone}
+                                </div>
+                                <div>
+                                  <p className={`font-semibold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
+                                    {categoria}
+                                  </p>
+                                  <p className={`text-sm ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    {dados.produtos} produto(s)
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className={`font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
+                                  {dados.quantidade} unidades
+                                </p>
+                                <p className="text-green-600 font-medium">
+                                  R$ {dados.valor.toFixed(2)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* 📈 ABA DE ANÁLISE COMPARATIVA */}
+          {!isLoadingData && abaAtiva === 'comparativo' && produtos && movimentacoes && (
+            <>
+              {/* Seletor de Período para Comparação */}
+              <div className={`mb-6 p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
+                  📊 Comparar Períodos
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Período Base (Atual)
+                    </label>
+                    <select
+                      value={periodoSelecionado}
+                      onChange={(e) => setPeriodoSelecionado(e.target.value)}
+                      className={`w-full border-2 rounded-lg px-4 py-3 ${
+                        modoNoturno 
+                          ? 'border-gray-600 bg-gray-700 text-white' 
+                          : 'border-gray-400 bg-white text-gray-900'
+                      }`}
+                    >
+                      <option value="7">Últimos 7 dias</option>
+                      <option value="30">Últimos 30 dias</option>
+                      <option value="90">Últimos 90 dias</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
+                      Período de Comparação
+                    </label>
+                    <select
+                      value={periodoComparacao}
+                      onChange={(e) => setPeriodoComparacao(e.target.value)}
+                      className={`w-full border-2 rounded-lg px-4 py-3 ${
+                        modoNoturno 
+                          ? 'border-gray-600 bg-gray-700 text-white' 
+                          : 'border-gray-400 bg-white text-gray-900'
+                      }`}
+                    >
+                      <option value="7">7 dias anteriores</option>
+                      <option value="30">30 dias anteriores</option>
+                      <option value="90">90 dias anteriores</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comparação de Métricas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                {(() => {
+                  // Calcular dados do período atual
+                  const agora = new Date()
+                  const diasAtrasAtual = new Date()
+                  diasAtrasAtual.setDate(agora.getDate() - parseInt(periodoSelecionado))
+                  
+                  const vendasAtuais = movimentacoes.filter(mov => {
+                    const [dia, mes, ano] = mov.data.split('/')
+                    const dataMovimentacao = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia))
+                    return mov.tipo === 'saida' && dataMovimentacao >= diasAtrasAtual && dataMovimentacao <= agora
+                  })
+                  
+                  // Calcular dados do período anterior
+                  const diasAtrasAnterior = new Date()
+                  diasAtrasAnterior.setDate(agora.getDate() - parseInt(periodoSelecionado) - parseInt(periodoComparacao))
+                  const fimPeriodoAnterior = new Date()
+                  fimPeriodoAnterior.setDate(agora.getDate() - parseInt(periodoSelecionado))
+                  
+                  const vendasAnteriores = movimentacoes.filter(mov => {
+                    const [dia, mes, ano] = mov.data.split('/')
+                    const dataMovimentacao = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia))
+                    return mov.tipo === 'saida' && dataMovimentacao >= diasAtrasAnterior && dataMovimentacao <= fimPeriodoAnterior
+                  })
+                  
+                  const faturamentoAtual = vendasAtuais.reduce((total, mov) => total + mov.valorTotal, 0)
+                  const faturamentoAnterior = vendasAnteriores.reduce((total, mov) => total + mov.valorTotal, 0)
+                  const crescimentoFaturamento = faturamentoAnterior > 0 ? ((faturamentoAtual - faturamentoAnterior) / faturamentoAnterior) * 100 : 0
+                  
+                  const quantidadeAtual = vendasAtuais.reduce((total, mov) => total + mov.quantidade, 0)
+                  const quantidadeAnterior = vendasAnteriores.reduce((total, mov) => total + mov.quantidade, 0)
+                  const crescimentoQuantidade = quantidadeAnterior > 0 ? ((quantidadeAtual - quantidadeAnterior) / quantidadeAnterior) * 100 : 0
+                  
+                  const transacoesAtuais = vendasAtuais.length
+                  const transacoesAnteriores = vendasAnteriores.length
+                  const crescimentoTransacoes = transacoesAnteriores > 0 ? ((transacoesAtuais - transacoesAnteriores) / transacoesAnteriores) * 100 : 0
+                  
+                  const ticketMedioAtual = transacoesAtuais > 0 ? faturamentoAtual / transacoesAtuais : 0
+                  const ticketMedioAnterior = transacoesAnteriores > 0 ? faturamentoAnterior / transacoesAnteriores : 0
+                  const crescimentoTicket = ticketMedioAnterior > 0 ? ((ticketMedioAtual - ticketMedioAnterior) / ticketMedioAnterior) * 100 : 0
+
+                  return (
+                    <>
+                      {/* Faturamento */}
+                      <div className={`p-6 rounded-xl shadow-lg text-white ${
+                        crescimentoFaturamento >= 0 
+                          ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                          : 'bg-gradient-to-r from-red-500 to-red-600'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-green-100 text-sm">Faturamento</p>
+                            <p className="text-2xl font-bold">R$ {faturamentoAtual.toFixed(2)}</p>
+                            <p className={`text-xs ${crescimentoFaturamento >= 0 ? 'text-green-100' : 'text-red-100'}`}>
+                              {crescimentoFaturamento >= 0 ? '↗️' : '↘️'} {Math.abs(crescimentoFaturamento).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div className="text-3xl ml-2">💰</div>
+                        </div>
+                      </div>
+
+                      {/* Quantidade */}
+                      <div className={`p-6 rounded-xl shadow-lg text-white ${
+                        crescimentoQuantidade >= 0 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+                          : 'bg-gradient-to-r from-red-500 to-red-600'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-blue-100 text-sm">Volume</p>
+                            <p className="text-2xl font-bold">{quantidadeAtual}</p>
+                            <p className={`text-xs ${crescimentoQuantidade >= 0 ? 'text-blue-100' : 'text-red-100'}`}>
+                              {crescimentoQuantidade >= 0 ? '↗️' : '↘️'} {Math.abs(crescimentoQuantidade).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div className="text-3xl ml-2">📦</div>
+                        </div>
+                      </div>
+
+                      {/* Transações */}
+                      <div className={`p-6 rounded-xl shadow-lg text-white ${
+                        crescimentoTransacoes >= 0 
+                          ? 'bg-gradient-to-r from-purple-500 to-purple-600' 
+                          : 'bg-gradient-to-r from-red-500 to-red-600'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-purple-100 text-sm">Vendas</p>
+                            <p className="text-2xl font-bold">{transacoesAtuais}</p>
+                            <p className={`text-xs ${crescimentoTransacoes >= 0 ? 'text-purple-100' : 'text-red-100'}`}>
+                              {crescimentoTransacoes >= 0 ? '↗️' : '↘️'} {Math.abs(crescimentoTransacoes).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div className="text-3xl ml-2">🛒</div>
+                        </div>
+                      </div>
+
+                      {/* Ticket Médio */}
+                      <div className={`p-6 rounded-xl shadow-lg text-white ${
+                        crescimentoTicket >= 0 
+                          ? 'bg-gradient-to-r from-orange-500 to-orange-600' 
+                          : 'bg-gradient-to-r from-red-500 to-red-600'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-orange-100 text-sm">Ticket Médio</p>
+                            <p className="text-xl font-bold">R$ {ticketMedioAtual.toFixed(2)}</p>
+                            <p className={`text-xs ${crescimentoTicket >= 0 ? 'text-orange-100' : 'text-red-100'}`}>
+                              {crescimentoTicket >= 0 ? '↗️' : '↘️'} {Math.abs(crescimentoTicket).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div className="text-3xl ml-2">🎯</div>
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
+              </div>
+
+              {/* Resumo Comparativo */}
+              <div className={`p-6 rounded-xl shadow-lg ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
+                  📈 Resumo da Análise Comparativa
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className={`font-bold ${modoNoturno ? 'text-green-400' : 'text-green-600'}`}>📈 Indicadores Positivos</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-green-500">✓</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Sistema em operação há {Math.floor((new Date().getTime() - new Date('2024-01-01').getTime()) / (1000 * 60 * 60 * 24))} dias
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-green-500">✓</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          {produtos.filter(p => p.ativo).length} produtos ativos no catálogo
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-green-500">✓</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Controle de validade automatizado funcionando
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className={`font-bold ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>�� Oportunidades</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-blue-500">→</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Aumente o volume de vendas cadastrando mais produtos
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-blue-500">→</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Monitore regularmente os produtos próximos do vencimento
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-blue-500">→</span>
+                        <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
+                          Use as categorias para organizar melhor o estoque
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Informações Adicionais ATUALIZADAS */}
           {!isLoadingData && (
             <div className={`mt-8 border rounded-xl p-4 transition-colors duration-300 ${
