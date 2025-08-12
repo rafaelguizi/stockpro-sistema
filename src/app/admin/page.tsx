@@ -757,7 +757,7 @@ export default function AdminPage() {
                             👥 {company.stats.userCount} usuários
                           </span>
                           <span className="text-xs text-gray-600">
-                            �� {company.stats.productCount} produtos
+                            📦 {company.stats.productCount} produtos
                           </span>
                         </div>
                       </td>
