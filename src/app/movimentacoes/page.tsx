@@ -931,66 +931,6 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 ESTATÍSTICAS POR CATEGORIA */}
-          {!isLoadingData && estatisticasCategorias.length > 0 && (
-            <div className={`p-6 rounded-xl shadow-lg mb-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
-              <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                📊 Movimentações por Categoria
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {estatisticasCategorias.slice(0, 6).map(stat => (
-                  <div
-                    key={stat.categoria.id || 'sem_categoria'}
-                    className={`p-4 rounded-lg border transition-colors duration-200 ${
-                      modoNoturno ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-white mr-3"
-                          style={{ backgroundColor: stat.categoria.cor }}
-                        >
-                          <span className="text-sm">{stat.categoria.icone}</span>
-                        </div>
-                        <div>
-                          <h4 className={`font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                            {stat.categoria.nome}
-                          </h4>
-                        </div>
-                      </div>
-                      <span className={`text-sm font-bold ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
-                        {stat.totalMovimentacoes} movs.
-                      </span>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className={modoNoturno ? 'text-gray-400' : 'text-gray-600'}>Entradas:</span>
-                        <span className={`font-medium text-green-600`}>
-                          {stat.entradas} (R$ {stat.valorEntradas.toFixed(0)})
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className={modoNoturno ? 'text-gray-400' : 'text-gray-600'}>Saídas:</span>
-                        <span className={`font-medium text-red-600`}>
-                          {stat.saidas} (R$ {stat.valorSaidas.toFixed(0)})
-                        </span>
-                      </div>
-                      <div className="flex justify-between border-t pt-2">
-                        <span className={`font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>Saldo:</span>
-                        <span className={`font-bold ${
-                          (stat.valorEntradas - stat.valorSaidas) >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          R$ {(stat.valorEntradas - stat.valorSaidas).toFixed(0)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* 🆕 FILTROS ATUALIZADOS COM CATEGORIA */}
           {!isLoadingData && produtosAtivos.length > 0 && (
             <div className={`p-6 rounded-xl shadow-lg mb-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
@@ -1732,7 +1672,7 @@ export default function Movimentacoes() {
               {/* Informações adicionais */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={`p-4 rounded-lg shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h4 className={`font-bold mb-2 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📈 Produto Mais Movimentado</h4>
+                  <h4 className={`font-bold mb-2 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>�� Produto Mais Movimentado</h4>
                   {(() => {
                     const produtosMais = movimentacoes.reduce((acc, mov) => {
                       acc[mov.produto] = (acc[mov.produto] || 0) + mov.quantidade
@@ -1772,78 +1712,13 @@ export default function Movimentacoes() {
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {ultimaMovimentacao.tipo === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                          {ultimaMovimentacao.tipo === 'entrada' ? '�� Entrada' : '📤 Saída'}
                         </span>
                       </div>
                     ) : (
                       <div className={`text-sm ${modoNoturno ? 'text-gray-400' : 'text-gray-500'}`}>Nenhuma movimentação encontrada</div>
                     )
                   })()}
-                </div>
-              </div>
-
-              {/* Saldo atual */}
-              <div className="mt-4">
-                <div className={`p-4 rounded-lg border-2 text-center ${
-                  (() => {
-                    const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                  movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                    
-                    return saldo >= 0 
-                      ? modoNoturno 
-                        ? 'bg-green-900 border-green-600' 
-                        : 'bg-green-100 border-green-400'
-                      : modoNoturno 
-                        ? 'bg-red-900 border-red-600' 
-                        : 'bg-red-100 border-red-400'
-                  })()
-                }`}>
-                  <h4 className={`font-bold text-lg mb-1 ${
-                    (() => {
-                      const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                    movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                      
-                      return saldo >= 0 
-                        ? modoNoturno ? 'text-green-200' : 'text-green-800'
-                        : modoNoturno ? 'text-red-200' : 'text-red-800'
-                    })()
-                  }`}>
-                    💼 Saldo em Movimentações
-                  </h4>
-                  <div className={`text-2xl font-bold ${
-                    (() => {
-                      const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                    movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                      
-                      return saldo >= 0 
-                        ? modoNoturno ? 'text-green-200' : 'text-green-800'
-                        : modoNoturno ? 'text-red-200' : 'text-red-800'
-                    })()
-                  }`}>
-                    {(() => {
-                      const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                    movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                      
-                      return saldo >= 0 ? `+R$ ${saldo.toFixed(2)}` : `-R$ ${Math.abs(saldo).toFixed(2)}`
-                    })()}
-                  </div>
-                  <div className={`text-sm mt-1 ${
-                    (() => {
-                      const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                    movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                      
-                      return saldo >= 0 
-                        ? modoNoturno ? 'text-green-300' : 'text-green-700'
-                        : modoNoturno ? 'text-red-300' : 'text-red-700'
-                    })()
-                  }`}>
-                    {(() => {
-                      const saldo = movimentacoes.filter(m => m.tipo === 'entrada').reduce((total, m) => total + m.valorTotal, 0) -
-                                    movimentacoes.filter(m => m.tipo === 'saida').reduce((total, m) => total + m.valorTotal, 0)
-                      
-                      return saldo >= 0 ? '🟢 Saldo positivo' : '🔴 Saldo negativo'
-                    })()}
-                  </div>
                 </div>
               </div>
             </div>
@@ -1866,7 +1741,6 @@ export default function Movimentacoes() {
                     <p>• <strong>📂 Filtros por categoria:</strong> Análise segmentada de movimentações</p>
                     <p>• <strong>🎨 Visual categorizado:</strong> Ícones e cores para fácil identificação</p>
                     <p>• <strong>🔍 Busca inteligente:</strong> Produto selector com categorias visuais</p>
-                    <p>• <strong>📊 Estatísticas por categoria:</strong> Top categorias movimentadas</p>
                     <p>• <strong>📥 Exportação melhorada:</strong> CSV com dados de categoria</p>
                     <p>• <strong>🔄 Controle automático:</strong> Atualização de estoque em tempo real</p>
                     <p>• <strong>💰 Valores automáticos:</strong> Entrada=compra, Saída=venda</p>
