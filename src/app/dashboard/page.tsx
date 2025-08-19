@@ -345,7 +345,7 @@ export default function Dashboard() {
                       onClick={() => router.push('/movimentacoes')}
                       className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
                     >
-                      <span className="text-xl">��</span>
+                      <span className="text-xl">📋</span>
                       <span>Nova Movimentação</span>
                     </button>
                   </div>

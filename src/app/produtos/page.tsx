@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO INTEGRADA E CORRIGIDA COM ADAPTAÇÃO AO MENU
+// src/app/produtos/page.tsx - VERSÃO INTEGRADA E CORRIGIDA COM MELHORIAS
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,13 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
+// �� INTERFACE PRODUTO ATUALIZADA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
-  categoriaId?: string // 🆕 NOVA PROPRIEDADE
-  codigoBarras: string
+  categoriaId?: string
+  codigosBarras: string[]      // 🆕 Array de códigos
+  temCodigoBarras: boolean     // 🆕 Controle se usa código
+  isDestilado: boolean         // 🆕 Bebida sem validade
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -63,6 +66,115 @@ interface CategoriaProduto {
   icone: string
   temValidade: boolean
   campos: CampoEspecifico[]
+}
+
+// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS DE BARRAS
+interface GerenciadorCodigosBarrasProps {
+  codigos: string[]
+  onChange: (codigos: string[]) => void
+  disabled?: boolean
+  onScanear?: () => void
+}
+
+function GerenciadorCodigosBarras({ codigos, onChange, disabled, onScanear }: GerenciadorCodigosBarrasProps) {
+  const [novoCodigo, setNovoCodigo] = useState('')
+
+  const adicionarCodigo = () => {
+    if (novoCodigo.trim() && !codigos.includes(novoCodigo.trim())) {
+      onChange([...codigos, novoCodigo.trim()])
+      setNovoCodigo('')
+    }
+  }
+
+  const removerCodigo = (index: number) => {
+    const novoscodigos = codigos.filter((_, i) => i !== index)
+    onChange(novoscodigos)
+  }
+
+  const replicarCodigo = (codigo: string) => {
+    const quantidade = prompt('Quantas unidades com este código?', '1')
+    if (quantidade && parseInt(quantidade) > 1) {
+      const novosCodigos = Array(parseInt(quantidade) - 1).fill(codigo)
+      onChange([...codigos, ...novosCodigos])
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Campo para adicionar novo código */}
+      <div className="flex space-x-2">
+        <input
+          type="text"
+          value={novoCodigo}
+          onChange={(e) => setNovoCodigo(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && adicionarCodigo()}
+          className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+          placeholder="Digite ou escaneie um código de barras"
+          disabled={disabled}
+        />
+        <LoadingButton
+          type="button"
+          onClick={adicionarCodigo}
+          variant="primary"
+          size="sm"
+          disabled={disabled || !novoCodigo.trim()}
+        >
+          ➕
+        </LoadingButton>
+        {onScanear && (
+          <LoadingButton
+            type="button"
+            onClick={onScanear}
+            variant="secondary"
+            size="sm"
+            disabled={disabled}
+          >
+            📱
+          </LoadingButton>
+        )}
+      </div>
+
+      {/* Lista de códigos */}
+      {codigos.length > 0 && (
+        <div className="space-y-2">
+          <h6 className="text-sm font-bold text-gray-800">Códigos cadastrados ({codigos.length}):</h6>
+          <div className="max-h-32 overflow-y-auto space-y-2 bg-gray-50 p-3 rounded-lg border">
+            {codigos.map((codigo, index) => (
+              <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
+                <span className="font-mono text-sm text-gray-900">{codigo}</span>
+                <div className="flex space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => replicarCodigo(codigo)}
+                    className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                    disabled={disabled}
+                    title="Replicar código"
+                  >
+                    📋
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removerCodigo(index)}
+                    className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    disabled={disabled}
+                    title="Remover código"
+                  >
+                    ❌
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Dicas */}
+      <div className="text-xs text-gray-500 space-y-1">
+        <p>💡 <strong>Dica:</strong> Use 📋 para replicar o mesmo código para várias unidades</p>
+        <p>🎯 <strong>Exemplo:</strong> 3 Camparis com códigos diferentes, ou 5 refrigerantes iguais</p>
+      </div>
+    </div>
+  )
 }
 
 // Categorias inteligentes atualizadas (MANTIDAS ORIGINAIS)
@@ -433,12 +545,14 @@ export default function Produtos() {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('')
   const [camposEspecificos, setCamposEspecificos] = useState<Record<string, any>>({})
 
-  // 🔧 ESTADOS DO FORMULÁRIO CORRIGIDOS
+  // 🆕 ESTADOS DO FORMULÁRIO ATUALIZADOS
   const [formData, setFormData] = useState({
     nome: '',
     categoria: '',
-    categoriaId: '', // ✅ String vazia ao invés de undefined
-    codigoBarras: '',
+    categoriaId: '',
+    codigosBarras: [] as string[],     // 🆕 Array de códigos
+    temCodigoBarras: true,             // �� Controle se usa código
+    isDestilado: false,                // 🆕 Bebida sem validade
     estoqueMinimo: '',
     valorCompra: '',
     valorVenda: '',
@@ -548,7 +662,8 @@ export default function Produtos() {
         ...prev,
         categoria: categoria.nome,
         categoriaId: categoriaId,
-        temValidade: false // Reset validade - será definida pela categoria inteligente se aplicável
+        temValidade: false, // Reset validade - será definida por destilado
+        isDestilado: false  // Reset destilado
       }))
       
       // Limpar categoria inteligente quando selecionar Firestore
@@ -557,7 +672,7 @@ export default function Produtos() {
     }
   }
 
-  // Função para lidar com mudança de categoria inteligente (MANTIDA ORIGINAL)
+  // 🆕 FUNÇÃO PARA LIDAR COM MUDANÇA DE CATEGORIA INTELIGENTE ATUALIZADA
   const handleCategoriaChange = (nomeCategoria: string) => {
     const categoriaInteligente = CATEGORIAS_INTELIGENTES.find(cat => cat.nome === nomeCategoria)
     
@@ -565,7 +680,8 @@ export default function Produtos() {
       ...prev,
       categoria: nomeCategoria,
       categoriaId: '', // Limpar categoria Firestore
-      temValidade: categoriaInteligente?.temValidade || false
+      temValidade: categoriaInteligente?.temValidade || false,
+      isDestilado: false // Reset destilado quando mudar categoria
     }))
     
     setCategoriaSelecionada(categoriaInteligente?.id || '')
@@ -586,6 +702,26 @@ export default function Produtos() {
         nome: valor
       }))
     }
+  }
+
+  // 🆕 FUNÇÃO PARA VALIDAR CÓDIGOS ÚNICOS
+  const validarCodigosUnicos = (novoscodigos: string[], produtoEditando?: string) => {
+    if (!produtos) return true
+
+    for (const codigo of novoscodigos) {
+      const produtoExistente = produtos.find(p => 
+        p.codigosBarras?.includes(codigo) && p.id !== produtoEditando
+      )
+      
+      if (produtoExistente) {
+        toast.error(
+          'Código duplicado!', 
+          `O código "${codigo}" já está sendo usado no produto "${produtoExistente.nome}"`
+        )
+        return false
+      }
+    }
+    return true
   }
 
   const iniciarScanner = async () => {
@@ -613,20 +749,27 @@ export default function Produtos() {
     setShowScanner(false)
   }
 
+  // 🆕 FUNÇÃO SIMULAR LEITURA ATUALIZADA PARA MÚLTIPLOS CÓDIGOS
   const simularLeituraCodigoBarras = () => {
     const codigoSimulado = Math.random().toString().substr(2, 13)
-    setFormData({...formData, codigoBarras: codigoSimulado})
-    pararScanner()
-    toast.success('Código escaneado!', `Código: ${codigoSimulado}`)
+    const novoscodigos = [...formData.codigosBarras, codigoSimulado]
+    
+    if (validarCodigosUnicos([codigoSimulado], editingId || undefined)) {
+      setFormData({...formData, codigosBarras: novoscodigos})
+      pararScanner()
+      toast.success('Código escaneado!', `Código: ${codigoSimulado} adicionado`)
+    }
   }
 
-  // 🔧 FUNÇÃO resetForm CORRIGIDA
+  // 🆕 FUNÇÃO resetForm ATUALIZADA
   const resetForm = () => {
     setFormData({
       nome: '',
       categoria: '',
-      categoriaId: '', // ✅ String vazia ao invés de undefined
-      codigoBarras: '',
+      categoriaId: '',
+      codigosBarras: [],        // 🆕 Array vazio
+      temCodigoBarras: true,    // 🆕 Default true
+      isDestilado: false,       // 🆕 Default false
       estoqueMinimo: '',
       valorCompra: '',
       valorVenda: '',
@@ -666,7 +809,7 @@ export default function Produtos() {
     }
   }
 
-  // 🚀 FUNÇÃO handleSubmit CORRIGIDA - SOLUÇÃO DO ERRO FIREBASE
+  // 🆕 FUNÇÃO handleSubmit ATUALIZADA COM NOVAS VALIDAÇÕES
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -681,6 +824,17 @@ export default function Produtos() {
       const nomeParaValidar = camposEspecificos.nome || formData.nome
       if (!nomeParaValidar || !formData.categoria) {
         toast.error('Campos obrigatórios', 'Preencha nome e categoria!')
+        return
+      }
+
+      // 🆕 VALIDAÇÃO DE CÓDIGOS DE BARRAS
+      if (formData.temCodigoBarras && formData.codigosBarras.length === 0) {
+        toast.warning('Código de barras obrigatório', 'Adicione pelo menos um código de barras ou desmarque a opção!')
+        return
+      }
+
+      // 🆕 VALIDAR CÓDIGOS ÚNICOS
+      if (formData.temCodigoBarras && !validarCodigosUnicos(formData.codigosBarras, editingId || undefined)) {
         return
       }
 
@@ -712,8 +866,10 @@ export default function Produtos() {
         return
       }
 
-      // Validação de data de validade
-      if (formData.temValidade && formData.dataValidade) {
+      // �� VALIDAÇÃO DE VALIDADE CONDICIONAL
+      const temValidadeReal = formData.temValidade && !formData.isDestilado
+      
+      if (temValidadeReal && formData.dataValidade) {
         const hoje = new Date()
         hoje.setHours(0, 0, 0, 0)
         
@@ -727,25 +883,16 @@ export default function Produtos() {
         }
       }
 
-      // Verificar código de barras duplicado
-      if (formData.codigoBarras && produtos) {
-        const codigoBarrasExiste = produtos.some(p =>
-          p.codigoBarras === formData.codigoBarras && p.id !== editingId
-        )
-
-        if (codigoBarrasExiste) {
-          toast.error('Código de barras já existe', 'Este código de barras já está sendo usado!')
-          return
-        }
-      }
-
-      // 🆕 OBJETO PRODUTO COM FILTRO DE UNDEFINED
+      // 🆕 OBJETO PRODUTO ATUALIZADO
       const dadosBasicos = {
         codigo: editingId ?
           produtos?.find(p => p.id === editingId)?.codigo || gerarProximoCodigo() :
           gerarProximoCodigo(),
         nome: nomeParaValidar,
         categoria: formData.categoria,
+        codigosBarras: formData.temCodigoBarras ? formData.codigosBarras : [],
+        temCodigoBarras: formData.temCodigoBarras,
+        isDestilado: formData.isDestilado,
         estoqueMinimo,
         valorCompra,
         valorVenda,
@@ -757,17 +904,12 @@ export default function Produtos() {
         userId: user.uid
       }
 
-      // 🆕 CAMPOS OPCIONAIS - SÓ ADICIONAR SE TIVEREM VALOR VÁLIDO
+      // 🆕 CAMPOS OPCIONAIS ATUALIZADOS
       const camposOpcionais: Partial<Produto> = {}
 
-      // CategoriaId - só adicionar se não for vazio e não for undefined
+      // CategoriaId
       if (formData.categoriaId && formData.categoriaId.trim() !== '') {
         camposOpcionais.categoriaId = formData.categoriaId
-      }
-
-      // Código de barras
-      if (formData.codigoBarras && formData.codigoBarras.trim() !== '') {
-        camposOpcionais.codigoBarras = formData.codigoBarras
       }
 
       // Campos básicos opcionais (só se não tiver campos específicos)
@@ -786,18 +928,19 @@ export default function Produtos() {
         }
       }
 
-      // Campos de validade
-      if (formData.temValidade) {
+      // 🆕 CAMPOS DE VALIDADE CONDICIONAIS
+      if (temValidadeReal) {
         camposOpcionais.temValidade = true
         if (formData.dataValidade && formData.dataValidade.trim() !== '') {
           camposOpcionais.dataValidade = formData.dataValidade
         }
         camposOpcionais.diasAlerta = diasAlerta
+      } else {
+        camposOpcionais.temValidade = false
       }
 
       // Campos específicos
       if (Object.keys(camposEspecificos).length > 0) {
-        // Filtrar campos específicos vazios
         const camposEspecificosFiltrados = Object.fromEntries(
           Object.entries(camposEspecificos).filter(([_, value]) => 
             value !== undefined && value !== null && value !== ''
@@ -811,12 +954,11 @@ export default function Produtos() {
       // 🆕 COMBINAR DADOS E FILTRAR UNDEFINED
       const novoProduto = { ...dadosBasicos, ...camposOpcionais }
 
-      // 🚀 FILTRO FINAL DE SEGURANÇA - REMOVER QUALQUER UNDEFINED
       const produtoLimpo = Object.fromEntries(
         Object.entries(novoProduto).filter(([_, value]) => value !== undefined)
       ) as Omit<Produto, 'id'>
 
-      console.log('Produto a ser salvo:', produtoLimpo) // Debug
+      console.log('Produto a ser salvo:', produtoLimpo)
 
       if (editingId) {
         await updateDocument(editingId, produtoLimpo)
@@ -835,6 +977,7 @@ export default function Produtos() {
     }
   }
 
+  // 🆕 FUNÇÃO handleEdit ATUALIZADA
   const handleEdit = async (produto: Produto) => {
     setLoading(true)
     try {
@@ -845,8 +988,10 @@ export default function Produtos() {
       setFormData({
         nome: produto.nome,
         categoria: produto.categoria,
-        categoriaId: produto.categoriaId || '', // 🆕 CARREGAR CATEGORIA ID
-        codigoBarras: produto.codigoBarras || '',
+        categoriaId: produto.categoriaId || '',
+        codigosBarras: produto.codigosBarras || [],      // 🆕 Carregar códigos
+        temCodigoBarras: produto.temCodigoBarras ?? true, // 🆕 Carregar flag
+        isDestilado: produto.isDestilado || false,        // 🆕 Carregar destilado
         estoqueMinimo: produto.estoqueMinimo.toString(),
         valorCompra: produto.valorCompra.toString(),
         valorVenda: produto.valorVenda.toString(),
@@ -914,16 +1059,17 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FILTRAR PRODUTOS ATUALIZADO COM CATEGORIA FIRESTORE
+  // 🆕 FILTRAR PRODUTOS ATUALIZADO COM MÚLTIPLOS CÓDIGOS
   const produtosFiltrados = produtos ? produtos.filter(produto => {
     const matchBusca = produto.nome.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.codigo.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.categoria.toLowerCase().includes(busca.toLowerCase()) ||
-                      produto.codigoBarras.toLowerCase().includes(busca.toLowerCase()) ||
+                      produto.codigosBarras?.some(codigo => 
+                        codigo.toLowerCase().includes(busca.toLowerCase())
+                      ) ||
                       produto.marca?.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.modelo?.toLowerCase().includes(busca.toLowerCase())
 
-    // 🆕 MATCH CATEGORIA ATUALIZADO
     const matchCategoria = filtroCategoria === '' || 
                           produto.categoria === filtroCategoria ||
                           produto.categoriaId === filtroCategoria
@@ -965,7 +1111,6 @@ export default function Produtos() {
     const categoriasProdutos = produtos ? [...new Set(produtos.map(p => p.categoria))].filter(Boolean) : []
     const categoriasFirestoreNomes = categoriasAtivasFirestore.map(cat => cat.nome)
     
-    // Combinar e remover duplicatas
     const todasCategorias = [...new Set([...categoriasProdutos, ...categoriasFirestoreNomes])]
     return todasCategorias.sort()
   }, [produtos, categoriasAtivasFirestore])
@@ -988,7 +1133,6 @@ export default function Produtos() {
           userEmail={user?.email || undefined}
         />
 
-        {/* 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD) */}
         <main className={`py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
           sidebarCollapsed
            ? 'lg:ml-16 lg:mr-4'
@@ -1109,7 +1253,7 @@ export default function Produtos() {
 
                 <div>
                   <label className="block text-sm font-bold text-gray-800 mb-2">Status</label>
-                  <select
+                  <select      
                     value={filtroStatus}
                     onChange={(e) => setFiltroStatus(e.target.value)}
                     className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm transition-all duration-200"
@@ -1132,7 +1276,7 @@ export default function Produtos() {
                     <option value="vencendo_hoje">⏰ Vencendo hoje</option>
                     <option value="vencendo_7_dias">📅 Vencendo em 7 dias</option>
                     <option value="proximo_vencimento">⚠️ Próximo do vencimento</option>
-                    <option value="com_validade">📆 Com validade</option>
+                    <option value="com_validade">�� Com validade</option>
                     <option value="sem_validade">♾️ Sem validade</option>
                   </select>
                 </div>
@@ -1164,7 +1308,7 @@ export default function Produtos() {
                   📊 {produtosFiltrados.length} de {produtos.length} produtos
                 </span>
                 <div className="flex items-center space-x-4 text-sm">
-                  <span className="text-blue-600">📱 {produtos.filter(p => p.codigoBarras).length} com código</span>
+                  <span className="text-blue-600">📱 {produtos.filter(p => p.codigosBarras?.length > 0).length} com código</span>
                   <span className="text-orange-600">📅 {estatisticasValidade.comValidade} com validade</span>
                   {(estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje) > 0 && (
                     <span className="text-red-600 font-medium">
@@ -1176,7 +1320,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 FORMULÁRIO ATUALIZADO COM CATEGORIAS FIRESTORE */}
+          {/* 🆕 FORMULÁRIO ATUALIZADO COM TODAS AS MELHORIAS */}
           {showForm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1213,11 +1357,11 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* 🆕 SELEÇÃO DE CATEGORIA ATUALIZADA COM FIRESTORE */}
+                  {/* Seleção de categoria */}
                   <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-200">
                     <h4 className="text-lg font-bold text-gray-900 mb-4">🏷️ Categoria do Produto</h4>
                     
-                    {/* 🆕 CATEGORIAS FIRESTORE PRIMEIRO */}
+                    {/* Categorias Firestore */}
                     {categoriasAtivasFirestore.length > 0 && (
                       <div className="mb-6">
                         <h5 className="text-md font-bold text-gray-800 mb-3">📂 Categorias Personalizadas</h5>
@@ -1246,7 +1390,7 @@ export default function Produtos() {
                       </div>
                     )}
 
-                    {/* CATEGORIAS INTELIGENTES MANTIDAS */}
+                    {/* Categorias Inteligentes */}
                     <div className="mb-4">
                       <h5 className="text-md font-bold text-gray-800 mb-3">🧠 Categorias Inteligentes</h5>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -1272,77 +1416,39 @@ export default function Produtos() {
                       </div>
                     </div>
 
-                    {/* Opção para criar categoria personalizada */}
-                    <div className="border-t pt-4">
-                      {!showNovaCategoria ? (
-                        <button
-                          type="button"
-                          onClick={() => setShowNovaCategoria(true)}
-                          className="w-full p-3 border-2 border-dashed border-green-300 rounded-lg text-green-600 hover:bg-green-50 transition-all duration-200 font-medium text-sm"
-                          disabled={loading}
-                        >
-                          ➕ Criar nova categoria personalizada
-                        </button>
-                      ) : (
-                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <label className="block text-sm font-bold text-green-800 mb-2">Nova Categoria:</label>
-                          <div className="flex space-x-2">
-                            <input
-                              type="text"
-                              value={novaCategoria}
-                              onChange={(e) => setNovaCategoria(e.target.value)}
-                              className="flex-1 border-2 border-green-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm text-sm"
-                              placeholder="Nome da categoria"
-                              disabled={loading}
-                            />
-                            <LoadingButton
-                              type="button"
-                              onClick={adicionarNovaCategoria}
-                              isLoading={loading}
-                              variant="success"
-                              size="sm"
-                            >
-                              ✅
-                            </LoadingButton>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowNovaCategoria(false)
-                                setNovaCategoria('')
-                              }}
-                              className="px-3 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                              disabled={loading}
-                            >
-                              ❌
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Categoria selecionada */}
-                      {formData.categoria && (
-                        <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                          <span className="text-sm text-purple-800">Categoria selecionada: </span>
-                          <span className="font-bold text-purple-900">{formData.categoria}</span>
-                          {formData.categoriaId && categoriasFirestore && (
-                            <div className="mt-2 flex items-center">
-                              <div
-                                className="w-6 h-6 rounded flex items-center justify-center text-white text-sm mr-2"
-                                style={{ backgroundColor: categoriasFirestore.find(c => c.id === formData.categoriaId)?.cor }}
-                              >
-                                {categoriasFirestore.find(c => c.id === formData.categoriaId)?.icone}
+                    {/* Categoria selecionada */}
+                    {formData.categoria && (
+                      <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <span className="text-sm text-purple-800">Categoria selecionada: </span>
+                        <span className="font-bold text-purple-900">{formData.categoria}</span>
+                        
+                        {/* 🆕 CHECKBOX DESTILADO PARA BEBIDAS */}
+                        {formData.categoria === 'Bebidas' && (
+                          <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={formData.isDestilado}
+                                onChange={(e) => setFormData(prev => ({
+                                  ...prev,
+                                  isDestilado: e.target.checked,
+                                  temValidade: e.target.checked ? false : prev.temValidade
+                                }))}
+                                disabled={loading}
+                                className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                              />
+                              <div className="flex items-center">
+                                <span className="text-2xl mr-2">🥃</span>
+                                <div>
+                                  <span className="text-sm font-bold text-orange-800">É destilado ou bebida sem validade</span>
+                                  <p className="text-xs text-orange-600">Whisky, vodka, cachaça, etc. não precisam de validade</p>
+                                </div>
                               </div>
-                              <span className="text-xs text-purple-600">Categoria personalizada</span>
-                            </div>
-                          )}
-                          {formData.temValidade && (
-                            <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                              📅 Produto com validade
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Campos específicos da categoria */}
@@ -1427,45 +1533,63 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* Controle de validade */}
-                  {formData.temValidade && (
-                    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5 animate-fade-in">
-                      <h4 className="text-lg font-bold text-orange-900 mb-4">📅 Controle de Validade</h4>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-orange-800 mb-2">
-                            Data de Validade *
-                          </label>
+                  {/* 🆕 CONTROLE DE VALIDADE CONDICIONAL */}
+                  {formData.categoria && !formData.isDestilado && (
+                    <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-bold text-orange-900">📅 Controle de Validade</h4>
+                        <label className="flex items-center space-x-2 cursor-pointer">
                           <input
-                           type="date"
-                           value={formData.dataValidade}
-                           onChange={(e) => setFormData({...formData, dataValidade: e.target.value})}
-                           className="w-full border-2 border-orange-300 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm text-sm transition-all duration-200"
-                           required={formData.temValidade}
-                           min={new Date().toISOString().split('T')[0]}
-                           disabled={loading}
+                            type="checkbox"
+                            checked={formData.temValidade}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              temValidade: e.target.checked,
+                              dataValidade: e.target.checked ? prev.dataValidade : '',
+                            }))}
+                            disabled={loading || formData.isDestilado}
+                            className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
                           />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-orange-800 mb-2">
-                            Alertar quantos dias antes?
-                          </label>
-                          <input
-                            type="number"
-                            value={formData.diasAlerta}
-                            onChange={(e) => setFormData({...formData, diasAlerta: e.target.value})}
-                            className="w-full border-2 border-orange-300 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm text-sm transition-all duration-200"
-                            placeholder="30"
-                            min="1"
-                            disabled={loading}
-                          />
-                        </div>
+                          <span className="text-sm font-bold text-orange-800">Este produto tem validade</span>
+                        </label>
                       </div>
+                      
+                      {formData.temValidade && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                          <div>
+                            <label className="block text-sm font-medium text-orange-800 mb-2">
+                              Data de Validade *
+                            </label>
+                            <input
+                             type="date"
+                             value={formData.dataValidade}
+                             onChange={(e) => setFormData({...formData, dataValidade: e.target.value})}
+                             className="w-full border-2 border-orange-300 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm text-sm transition-all duration-200"
+                             required={formData.temValidade}
+                             min={new Date().toISOString().split('T')[0]}
+                             disabled={loading}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-orange-800 mb-2">
+                              Alertar quantos dias antes?
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.diasAlerta}
+                              onChange={(e) => setFormData({...formData, diasAlerta: e.target.value})}
+                              className="w-full border-2 border-orange-300 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm text-sm transition-all duration-200"
+                              placeholder="30"
+                              min="1"
+                              disabled={loading}
+                            />
+                          </div>
+                        </div>
+                      )}
                        
                       {/* Preview de validade */}
-                      {formData.dataValidade && (
+                      {formData.temValidade && formData.dataValidade && (
                         <div className="mt-3 p-3 bg-orange-100 rounded-lg">
                           <p className="text-sm text-orange-800">
                             ⚠️ <strong>Preview:</strong> {(() => {
@@ -1491,48 +1615,60 @@ export default function Produtos() {
                           </p>
                         </div>
                       )}
+
+                      {/* Info destilado */}
+                      {formData.isDestilado && (
+                        <div className="mt-3 p-3 bg-blue-100 rounded-lg border border-blue-200">
+                          <p className="text-sm text-blue-800">
+                            🥃 <strong>Produto destilado:</strong> A validade está desabilitada automaticamente para este tipo de bebida.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Código de Barras */}
+                  {/* 🆕 GERENCIADOR DE CÓDIGOS DE BARRAS */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <h4 className="text-lg font-bold text-gray-900 mb-4">📱 Código de Barras</h4>
-                    
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        value={formData.codigoBarras}
-                        onChange={(e) => setFormData({...formData, codigoBarras: e.target.value})}
-                        className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm placeholder-gray-600 text-sm transition-all duration-200"
-                        placeholder="Digite ou escaneie o código de barras"
-                        disabled={loading}
-                      />
-                      <div className="flex space-x-2">
-                        <LoadingButton
-                          type="button"
-                          onClick={iniciarScanner}
-                          variant="secondary"
-                          size="sm"
-                          className="flex-1"
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-bold text-gray-900">📱 Códigos de Barras</h4>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.temCodigoBarras}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            temCodigoBarras: e.target.checked,
+                            codigosBarras: e.target.checked ? prev.codigosBarras : []
+                          }))}
                           disabled={loading}
-                        >
-                          📱 Escanear
-                        </LoadingButton>
-                        <LoadingButton
-                          type="button"
-                          onClick={simularLeituraCodigoBarras}
-                          variant="warning"
-                          size="sm"
-                          className="flex-1"
-                          disabled={loading}
-                        >
-                          🎲 Simular
-                        </LoadingButton>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        💡 O código de barras permite vendas rápidas no PDV
-                      </p>
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm font-bold text-gray-800">Este produto possui códigos de barras</span>
+                      </label>
                     </div>
+                    
+                    {formData.temCodigoBarras ? (
+                      <GerenciadorCodigosBarras
+                        codigos={formData.codigosBarras}
+                        onChange={(novoscodigos) => setFormData(prev => ({
+                          ...prev,
+                          codigosBarras: novoscodigos
+                        }))}
+                        disabled={loading}
+                        onScanear={iniciarScanner}
+                      />
+                    ) : (
+                      <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                        <div className="text-4xl mb-2">📝</div>
+                        <h5 className="text-lg font-bold text-gray-700 mb-2">Produto sem código de barras</h5>
+                        <p className="text-sm text-gray-600">
+                          Ideal para produtos avulsos como: bala avulsa, cigarro solto, copo de 700ml, etc.
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          💡 No PDV haverá um campo especial para adicionar estes produtos rapidamente
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Preços e Estoque */}
@@ -1703,7 +1839,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Lista de Produtos Atualizada com Visual por Categoria */}
+          {/* Lista de Produtos Atualizada */}
           {!loadingProdutos && (
             <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-fade-in">
               <div className="px-6 py-4 border-b border-gray-200">
@@ -1767,9 +1903,22 @@ export default function Produtos() {
                               <div className="flex-1 min-w-0">
                                 <div className="space-y-1 text-xs text-gray-600">
                                   <p><span className="font-medium">Categoria:</span> {dadosCategoria.nome}</p>
-                                  {produto.codigoBarras && (
-                                    <p><span className="font-medium">Código de Barras:</span> {produto.codigoBarras}</p>
+                                  
+                                  {/* 🆕 CÓDIGOS DE BARRAS MÚLTIPLOS */}
+                                  {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
+                                    <p>
+                                      <span className="font-medium">Códigos:</span> 
+                                      <span className="ml-1 text-blue-600">
+                                        {produto.codigosBarras.length} código(s)
+                                      </span>
+                                    </p>
+                                  ) : (
+                                    <p>
+                                      <span className="font-medium">Códigos:</span> 
+                                      <span className="text-gray-400">Sem código</span>
+                                    </p>
                                   )}
+                                  
                                   {produto.marca && (
                                     <p><span className="font-medium">Marca:</span> {produto.marca}</p>
                                   )}
@@ -1777,8 +1926,13 @@ export default function Produtos() {
                                   <p><span className="font-medium">Compra:</span> R$ {produto.valorCompra.toFixed(2)}</p>
                                   <p><span className="font-medium">Venda:</span> R$ {produto.valorVenda.toFixed(2)}</p>
                                   
-                                  {/* Informações de validade */}
-                                  {produto.temValidade && produto.dataValidade && (
+                                  {/* 🆕 INFORMAÇÕES DE VALIDADE CONDICIONAIS */}
+                                  {produto.isDestilado ? (
+                                    <p>
+                                      <span className="font-medium">Validade:</span> 
+                                      <span className="text-blue-600 ml-1">🥃 Destilado (sem validade)</span>
+                                    </p>
+                                  ) : produto.temValidade && produto.dataValidade ? (
                                    <p>
                                     <span className="font-medium">Validade:</span> {(() => {
                                       const [ano, mes, dia] = produto.dataValidade.split('-')
@@ -1786,6 +1940,11 @@ export default function Produtos() {
                                     })()}
                                     <span className="ml-1">({validadeInfo.textoVencimento})</span>
                                    </p>
+                                  ) : (
+                                    <p>
+                                      <span className="font-medium">Validade:</span> 
+                                      <span className="text-gray-400 ml-1">Sem validade</span>
+                                    </p>
                                   )}
                                 </div>
 
@@ -1805,14 +1964,26 @@ export default function Produtos() {
                                     </span>
                                   )}
 
-                                  {produto.codigoBarras && (
+                                  {/* 🆕 BADGE PARA CÓDIGOS */}
+                                  {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                      📱 Escaneável
+                                      📱 {produto.codigosBarras.length} código(s)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                      📝 Sem código
+                                    </span>
+                                  )}
+
+                                  {/* 🆕 BADGE DESTILADO */}
+                                  {produto.isDestilado && (
+                                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      🥃 Destilado
                                     </span>
                                   )}
 
                                   {/* Badges de validade */}
-                                  {produto.temValidade && (
+                                  {produto.temValidade && !produto.isDestilado && (
                                     <>
                                       {validadeInfo.status === 'vencido' && (
                                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -1832,11 +2003,6 @@ export default function Produtos() {
                                       {validadeInfo.status === 'proximo_vencimento' && (
                                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                                           ⚠️ Próximo do vencimento
-                                        </span>
-                                      )}
-                                      {validadeInfo.status === 'valido' && (
-                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                          📅 Válido
                                         </span>
                                       )}
                                     </>
@@ -1893,7 +2059,7 @@ export default function Produtos() {
                             Categoria
                           </th>  
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Código de Barras
+                            Códigos de Barras
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Estoque
@@ -1948,16 +2114,34 @@ export default function Produtos() {
                                 </div>
                               </td>
                               
+                              {/* 🆕 COLUNA CÓDIGOS MÚLTIPLOS */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {produto.codigoBarras ? (
+                                {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
                                   <div>
-                                    <div className="font-mono text-xs">{produto.codigoBarras}</div>
-                                    <div className="text-xs text-blue-600">📱 Escaneável</div>
+                                    <div className="font-bold text-blue-600 mb-1">
+                                      {produto.codigosBarras.length} código(s)
+                                    </div>
+                                    <div className="space-y-1 max-h-20 overflow-y-auto">
+                                      {produto.codigosBarras.slice(0, 3).map((codigo, index) => (
+                                        <div key={index} className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                                          {codigo}
+                                        </div>
+                                      ))}
+                                      {produto.codigosBarras.length > 3 && (
+                                        <div className="text-xs text-gray-500">
+                                          +{produto.codigosBarras.length - 3} mais...
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : (
-                                  <span className="text-gray-400">Não cadastrado</span>
+                                  <div className="text-center">
+                                    <div className="text-gray-400 mb-1">📝</div>
+                                    <div className="text-xs text-gray-500">Sem código</div>
+                                  </div>
                                 )}
                               </td>
+
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm text-gray-900">
                                   <div className="font-medium">{produto.estoque} unidades</div>
@@ -1984,9 +2168,16 @@ export default function Produtos() {
                                 <div>Venda: R$ {produto.valorVenda.toFixed(2)}</div>
                               </td>
                               
-                              {/* Coluna de validade */}
+                              {/* 🆕 COLUNA DE VALIDADE CONDICIONAL */}
                               <td className="px-6 py-4 whitespace-nowrap">
-                                {produto.temValidade && produto.dataValidade ? (
+                                {produto.isDestilado ? (
+                                  <div className="text-center">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      🥃 Destilado
+                                    </span>
+                                    <div className="text-xs text-gray-500 mt-1">Sem validade</div>
+                                  </div>
+                                ) : produto.temValidade && produto.dataValidade ? (
                                   <div>
                                     <div className="text-sm text-gray-900">
                                       {(() => {
@@ -2023,7 +2214,10 @@ export default function Produtos() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <span className="text-gray-400 text-sm">Sem validade</span>
+                                  <div className="text-center">
+                                    <span className="text-gray-400 text-sm">♾️</span>
+                                    <div className="text-xs text-gray-500">Sem validade</div>
+                                  </div>
                                 )}
                               </td>
                               
@@ -2085,9 +2279,12 @@ export default function Produtos() {
                   <div className="text-blue-600 text-sm font-medium">Produtos Ativos</div>
                 </div>
 
+                {/* 🆕 ESTATÍSTICA DE CÓDIGOS MÚLTIPLOS */}
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
-                  <div className="text-2xl font-bold text-green-600">{produtos.filter(p => p.codigoBarras).length}</div>
-                  <div className="text-green-600 text-sm font-medium">Com Código de Barras</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {produtos.filter(p => p.codigosBarras && p.codigosBarras.length > 0).length}
+                  </div>
+                  <div className="text-green-600 text-sm font-medium">Com Códigos</div>
                 </div>
 
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
@@ -2110,6 +2307,30 @@ export default function Produtos() {
                     R$ {produtos.filter(p => p.ativo).reduce((total, p) => total + (p.estoque * p.valorCompra), 0).toFixed(2)}
                   </div>
                   <div className="text-purple-600 text-sm font-medium">Valor Estoque</div>
+                </div>
+              </div>
+
+              {/* 🆕 RESUMO DE CÓDIGOS E DESTILADOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+                <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-xl font-bold text-blue-600">
+                    {produtos.reduce((total, p) => total + (p.codigosBarras?.length || 0), 0)}
+                  </div>
+                  <div className="text-blue-600 text-sm font-medium">Total de Códigos</div>
+                </div>
+
+                <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="text-xl font-bold text-orange-600">
+                    {produtos.filter(p => p.isDestilado).length}
+                  </div>
+                  <div className="text-orange-600 text-sm font-medium">Destilados</div>
+                </div>
+
+                <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-xl font-bold text-gray-600">
+                    {produtos.filter(p => !p.temCodigoBarras).length}
+                  </div>
+                  <div className="text-gray-600 text-sm font-medium">Sem Código</div>
                 </div>
               </div>
 
@@ -2139,23 +2360,26 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Informações sobre sistema inteligente */}
+          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA ATUALIZADO */}
           <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-6 animate-fade-in">
             <div className="flex">
               <div className="flex-shrink-0">
-                <div className="text-3xl">📱</div>
+                <div className="text-3xl">🚀</div>
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-blue-800 mb-2">
-                  Sistema de Código de Barras
+                  Sistema Avançado de Produtos com Múltiplos Códigos
                 </h3>
                 <div className="text-sm text-blue-700 space-y-2">
-                  <p>• <strong>Cadastre códigos de barras</strong> nos produtos para vendas mais rápidas</p>
-                  <p>• <strong>Use a câmera</strong> do celular/computador para escanear códigos</p>
-                  <p>• <strong>Compatível com leitores físicos</strong> quando conectados ao computador</p>
-                  <p>• <strong>PDV otimizado</strong> para vendas com código de barras</p>
-                  <p>• <strong>Busca inteligente</strong> por código de barras nos filtros</p>
-                  <p>• <strong>Dados sincronizados</strong> em tempo real com o Firebase</p>
+                  <p>• <strong>🏷️ Múltiplos códigos por produto:</strong> Cadastre vários códigos para o mesmo item</p>
+                  <p>• <strong>📋 Replicação inteligente:</strong> Clone códigos iguais para múltiplas unidades</p>
+                  <p>• <strong>🥃 Destilados sem validade:</strong> Bebidas destiladas automaticamente sem data de vencimento</p>
+                  <p>• <strong>📝 Produtos sem código:</strong> Para itens avulsos como balas soltas, cigarros avulsos</p>
+                  <p>• <strong>📱 Scanner integrado:</strong> Use a câmera para escanear códigos diretamente</p>
+                  <p>• <strong>✅ Validação inteligente:</strong> Sistema impede códigos duplicados</p>
+                  <p>• <strong>🎨 Visual por categoria:</strong> Cores e ícones para fácil identificação</p>
+                  <p>• <strong>📊 Controle de validade condicional:</strong> Apenas produtos que realmente precisam</p>
+                  <p>• <strong>🔄 Integração total:</strong> Funciona perfeitamente com PDV e movimentações</p>
                 </div>
               </div>
             </div>
