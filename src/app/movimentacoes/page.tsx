@@ -176,7 +176,7 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
               value={novoCodigoInput}
               onChange={(e) => setNovoCodigoInput(e.target.value)}
               placeholder="Digite ou escaneie o código de barras..."
-              className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+              className="w-full border-2 border-gray-800 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
               disabled={disabled}
             />
           </div>
@@ -187,7 +187,7 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
               min="1"
               value={quantidadeAdicionar}
               onChange={(e) => setQuantidadeAdicionar(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+              className="w-full border-2 border-gray-800 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
               placeholder="Qtd"
               disabled={disabled}
             />
