@@ -43,6 +43,9 @@ interface Movimentacao {
   companyId?: string
 }
 
+// 🆕 TIPO PARA FILTRO ATIVO
+type FiltroAtivo = 'todos' | 'estoque_baixo' | 'estoque_zerado' | 'proximo_vencimento'
+
 export default function Dashboard() {
   const router = useRouter()
   const { user } = useAuth()
@@ -53,6 +56,9 @@ export default function Dashboard() {
   const { data: movimentacoes, loading: loadingMovimentacoes } = useFirestore<Movimentacao>('movimentacoes')
 
   const [loading, setLoading] = useState(true)
+
+  // 🆕 ESTADO PARA CONTROLAR FILTRO ATIVO
+  const [filtroAtivo, setFiltroAtivo] = useState<FiltroAtivo>('todos')
 
   useEffect(() => {
     // Simular um pequeno delay para melhor UX
@@ -219,6 +225,46 @@ export default function Dashboard() {
     }
   }, [])
 
+  // 🆕 FUNÇÃO PARA LIDAR COM CLIQUE NOS CARDS FILTRÁVEIS
+  const handleCardClick = (filtro: FiltroAtivo) => {
+    setFiltroAtivo(filtro)
+    
+    // Feedback visual e sonoro
+    const filtroTextos = {
+      'estoque_baixo': 'Produtos com estoque baixo',
+      'estoque_zerado': 'Produtos sem estoque', 
+      'proximo_vencimento': 'Produtos próximos ao vencimento',
+      'todos': 'Todos os alertas'
+    }
+    
+    toast.info('Filtro aplicado!', filtroTextos[filtro])
+  }
+
+  // 🆕 FUNÇÃO PARA OBTER ESTILOS DOS CARDS BASEADO NO FILTRO ATIVO
+  const getCardStyles = (tipo: FiltroAtivo) => {
+    const isActive = filtroAtivo === tipo
+    const isOtherActive = filtroAtivo !== 'todos' && filtroAtivo !== tipo
+    
+    const baseStyles = "p-6 rounded-xl shadow-lg text-white transition-all duration-300 transform cursor-pointer"
+    
+    if (isActive) {
+      // Card ativo - mais destacado
+      return `${baseStyles} scale-105 shadow-2xl ring-4 ring-white ring-opacity-50 hover:scale-110`
+    } else if (isOtherActive) {
+      // Outros cards quando um está ativo - mais claros
+      return `${baseStyles} opacity-60 hover:opacity-80 hover:scale-102`
+    } else {
+      // Estado normal
+      return `${baseStyles} hover:scale-105 hover:shadow-xl`
+    }
+  }
+
+  // 🆕 FUNÇÃO PARA OBTER TAMANHO DO ÍCONE BASEADO NO ESTADO
+  const getIconSize = (tipo: FiltroAtivo) => {
+    const isActive = filtroAtivo === tipo
+    return isActive ? "text-5xl" : "text-4xl"
+  }
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-100">
@@ -299,17 +345,30 @@ export default function Dashboard() {
                       onClick={() => router.push('/movimentacoes')}
                       className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
                     >
-                      <span className="text-xl">📋</span>
+                      <span className="text-xl">��</span>
                       <span>Nova Movimentação</span>
                     </button>
                   </div>
                 </div>
               </div>
 
+              {/* 🆕 BOTÃO VER TODOS - Aparece quando há filtro ativo */}
+              {filtroAtivo !== 'todos' && (
+                <div className="mb-6 flex justify-center">
+                  <button
+                    onClick={() => handleCardClick('todos')}
+                    className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 shadow-lg"
+                  >
+                    <span className="text-xl">👁️</span>
+                    <span>Ver Todos os Alertas</span>
+                  </button>
+                </div>
+              )}
+
               {/* Cards de Estatísticas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
 
-                {/* Total de Produtos */}
+                {/* Total de Produtos - Não clicável */}
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -321,43 +380,58 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Estoque Baixo */}
-                <div className="bg-gradient-to-r from-yellow-500 to-orange-500 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                {/* 🆕 ESTOQUE BAIXO - Agora é um botão filtrável */}
+                <div 
+                  className={`bg-gradient-to-r from-yellow-500 to-orange-500 ${getCardStyles('estoque_baixo')}`}
+                  onClick={() => handleCardClick(filtroAtivo === 'estoque_baixo' ? 'todos' : 'estoque_baixo')}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-yellow-100 text-sm">Estoque Baixo</p>
                       <p className="text-3xl font-bold">{produtosEstoqueBaixo.length}</p>
-                      <p className="text-yellow-100 text-xs">Precisam reposição</p>
+                      <p className="text-yellow-100 text-xs">
+                        {filtroAtivo === 'estoque_baixo' ? '👁️ Visualizando' : 'Clique para filtrar'}
+                      </p>
                     </div>
-                    <div className="text-4xl ml-3">⚠️</div>
+                    <div className={`ml-3 transition-all duration-300 ${getIconSize('estoque_baixo')}`}>⚠️</div>
                   </div>
                 </div>
 
-                {/* Estoque Zerado */}
-                <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                {/* 🆕 ESTOQUE ZERADO - Agora é um botão filtrável */}
+                <div 
+                  className={`bg-gradient-to-r from-red-500 to-red-600 ${getCardStyles('estoque_zerado')}`}
+                  onClick={() => handleCardClick(filtroAtivo === 'estoque_zerado' ? 'todos' : 'estoque_zerado')}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-red-100 text-sm">Estoque Zerado</p>
                       <p className="text-3xl font-bold">{produtosEstoqueZerado.length}</p>
-                      <p className="text-red-100 text-xs">Sem estoque</p>
+                      <p className="text-red-100 text-xs">
+                        {filtroAtivo === 'estoque_zerado' ? '👁️ Visualizando' : 'Clique para filtrar'}
+                      </p>
                     </div>
-                    <div className="text-4xl ml-3">🚫</div>
+                    <div className={`ml-3 transition-all duration-300 ${getIconSize('estoque_zerado')}`}>🚫</div>
                   </div>
                 </div>
 
-                {/* Alertas de Validade */}
-                <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                {/* 🆕 PRÓXIMO VENCIMENTO - Agora é um botão filtrável */}
+                <div 
+                  className={`bg-gradient-to-r from-purple-500 to-purple-600 ${getCardStyles('proximo_vencimento')}`}
+                  onClick={() => handleCardClick(filtroAtivo === 'proximo_vencimento' ? 'todos' : 'proximo_vencimento')}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-purple-100 text-sm">Próx. Vencimento</p>
                       <p className="text-3xl font-bold">{totalProdutosComProblemaValidade}</p>
-                      <p className="text-purple-100 text-xs">Requer atenção</p>
+                      <p className="text-purple-100 text-xs">
+                        {filtroAtivo === 'proximo_vencimento' ? '👁️ Visualizando' : 'Clique para filtrar'}
+                      </p>
                     </div>
-                    <div className="text-4xl ml-3">📅</div>
+                    <div className={`ml-3 transition-all duration-300 ${getIconSize('proximo_vencimento')}`}>📅</div>
                   </div>
                 </div>
 
-                {/* Faturamento Mensal */}
+                {/* Faturamento Mensal - Não clicável */}
                 <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -370,22 +444,36 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* 🛠️ ALERTAS CORRIGIDOS - USO DIRETO DO textoVencimento */}
+              {/* 🆕 ALERTAS FILTRÁVEIS - Baseado no filtro ativo */}
               {(produtosEstoqueBaixo.length > 0 || produtosEstoqueZerado.length > 0 || totalProdutosComProblemaValidade > 0) && (
                 <div className="bg-white rounded-xl shadow-xl p-6 mb-8">
-                  <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
-                    🚨 Alertas Importantes
-                  </h3>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-gray-800 flex items-center">
+                      🚨 Alertas Importantes
+                    </h3>
+                    {filtroAtivo !== 'todos' && (
+                      <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                        {filtroAtivo === 'estoque_baixo' && '⚠️ Filtrando: Estoque Baixo'}
+                        {filtroAtivo === 'estoque_zerado' && '🚫 Filtrando: Estoque Zerado'}
+                        {filtroAtivo === 'proximo_vencimento' && '📅 Filtrando: Próx. Vencimento'}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="space-y-6">
-                    {/* 🆕 PRODUTOS COM ESTOQUE BAIXO */}
-                    {produtosEstoqueBaixo.length > 0 && (
+                    {/* 🆕 PRODUTOS COM ESTOQUE BAIXO - Renderiza apenas se filtro for 'todos' ou 'estoque_baixo' */}
+                    {produtosEstoqueBaixo.length > 0 && (filtroAtivo === 'todos' || filtroAtivo === 'estoque_baixo') && (
                       <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-5">
                         <h4 className="font-bold text-yellow-800 mb-3 flex items-center">
                           ⚠️ Produtos com estoque baixo ({produtosEstoqueBaixo.length})
+                          {filtroAtivo === 'estoque_baixo' && (
+                            <span className="ml-2 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">
+                              Filtro ativo
+                            </span>
+                          )}
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {produtosEstoqueBaixo.slice(0, 6).map(produto => (
+                          {produtosEstoqueBaixo.slice(0, filtroAtivo === 'estoque_baixo' ? 12 : 6).map(produto => (
                             <div key={produto.id} className="bg-white p-4 rounded-lg border border-yellow-200 hover:shadow-md transition-shadow">
                               <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
                               <p className="text-xs text-gray-500">#{produto.codigo}</p>
@@ -395,22 +483,35 @@ export default function Dashboard() {
                             </div>
                           ))}
                         </div>
-                        {produtosEstoqueBaixo.length > 6 && (
+                        {produtosEstoqueBaixo.length > (filtroAtivo === 'estoque_baixo' ? 12 : 6) && (
                           <p className="text-yellow-600 text-sm mt-3 font-medium">
-                            +{produtosEstoqueBaixo.length - 6} produtos também estão com estoque baixo
+                            +{produtosEstoqueBaixo.length - (filtroAtivo === 'estoque_baixo' ? 12 : 6)} produtos também estão com estoque baixo
+                            {filtroAtivo !== 'estoque_baixo' && (
+                              <button 
+                                onClick={() => handleCardClick('estoque_baixo')}
+                                className="ml-2 underline hover:no-underline"
+                              >
+                                (clique para ver todos)
+                              </button>
+                            )}
                           </p>
                         )}
                       </div>
                     )}
 
-                    {/* Produtos com estoque zerado */}
-                    {produtosEstoqueZerado.length > 0 && (
+                    {/* 🆕 PRODUTOS COM ESTOQUE ZERADO - Renderiza apenas se filtro for 'todos' ou 'estoque_zerado' */}
+                    {produtosEstoqueZerado.length > 0 && (filtroAtivo === 'todos' || filtroAtivo === 'estoque_zerado') && (
                       <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5">
                         <h4 className="font-bold text-red-800 mb-3 flex items-center">
                           🚫 Produtos sem estoque ({produtosEstoqueZerado.length})
+                          {filtroAtivo === 'estoque_zerado' && (
+                            <span className="ml-2 text-xs bg-red-200 text-red-800 px-2 py-1 rounded-full">
+                              Filtro ativo
+                            </span>
+                          )}
                         </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {produtosEstoqueZerado.slice(0, 6).map(produto => (
+                          {produtosEstoqueZerado.slice(0, filtroAtivo === 'estoque_zerado' ? 12 : 6).map(produto => (
                             <div key={produto.id} className="bg-white p-4 rounded-lg border border-red-200 hover:shadow-md transition-shadow">
                               <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
                               <p className="text-xs text-gray-500">#{produto.codigo}</p>
@@ -418,20 +519,34 @@ export default function Dashboard() {
                             </div>
                           ))}
                         </div>
-                        {produtosEstoqueZerado.length > 6 && (
+                        {produtosEstoqueZerado.length > (filtroAtivo === 'estoque_zerado' ? 12 : 6) && (
                           <p className="text-red-600 text-sm mt-3 font-medium">
-                            +{produtosEstoqueZerado.length - 6} produtos também estão sem estoque
+                            +{produtosEstoqueZerado.length - (filtroAtivo === 'estoque_zerado' ? 12 : 6)} produtos também estão sem estoque
+                            {filtroAtivo !== 'estoque_zerado' && (
+                              <button 
+                                onClick={() => handleCardClick('estoque_zerado')}
+                                className="ml-2 underline hover:no-underline"
+                              >
+                                (clique para ver todos)
+                              </button>
+                            )}
                           </p>
                         )}
                       </div>
                     )}
 
-                    {/* 🛠️ ALERTAS DE VALIDADE CORRIGIDOS - USO DIRETO DO textoVencimento */}
+                    {/* 🆕 ALERTAS DE VALIDADE - Renderiza apenas se filtro for 'todos' ou 'proximo_vencimento' */}
                     {(alertasValidade.vencidos.length > 0 || alertasValidade.vencendoHoje.length > 0 || 
-                      alertasValidade.vencendoEm7Dias.length > 0 || alertasValidade.vencendoEm30Dias.length > 0) && (
+                      alertasValidade.vencendoEm7Dias.length > 0 || alertasValidade.vencendoEm30Dias.length > 0) && 
+                      (filtroAtivo === 'todos' || filtroAtivo === 'proximo_vencimento') && (
                       <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
                         <h4 className="font-bold text-orange-800 mb-3 flex items-center">
                           📅 Alertas de Validade ({totalProdutosComProblemaValidade})
+                          {filtroAtivo === 'proximo_vencimento' && (
+                            <span className="ml-2 text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
+                              Filtro ativo
+                            </span>
+                          )}
                         </h4>
                         
                         {/* Produtos vencidos */}
@@ -439,8 +554,8 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-red-700 mb-2">🚨 Vencidos ({alertasValidade.vencidos.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencidos.slice(0, 3).map(produto => {
-                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                              {alertasValidade.vencidos.slice(0, filtroAtivo === 'proximo_vencimento' ? 6 : 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto)
                                 return (
                                   <div key={produto.id} className="bg-white p-3 rounded-lg border border-red-200">
                                     <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
@@ -457,8 +572,8 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-orange-700 mb-2">⏰ Vencem hoje ({alertasValidade.vencendoHoje.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoHoje.slice(0, 3).map(produto => {
-                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                              {alertasValidade.vencendoHoje.slice(0, filtroAtivo === 'proximo_vencimento' ? 6 : 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto)
                                 return (
                                   <div key={produto.id} className="bg-white p-3 rounded-lg border border-orange-200">
                                     <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
@@ -475,8 +590,8 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-yellow-700 mb-2">📅 Vencem em até 7 dias ({alertasValidade.vencendoEm7Dias.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoEm7Dias.slice(0, 3).map(produto => {
-                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                              {alertasValidade.vencendoEm7Dias.slice(0, filtroAtivo === 'proximo_vencimento' ? 6 : 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto)
                                 return (
                                   <div key={produto.id} className="bg-white p-3 rounded-lg border border-yellow-200">
                                     <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
@@ -493,18 +608,53 @@ export default function Dashboard() {
                           <div className="mb-4">
                             <h5 className="font-semibold text-blue-700 mb-2">📋 Vencem em até 30 dias ({alertasValidade.vencendoEm30Dias.length})</h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {alertasValidade.vencendoEm30Dias.slice(0, 3).map(produto => {
-                                const validadeInfo = verificarValidade(produto) // 🛠️ USAR FUNÇÃO CORRIGIDA
+                              {alertasValidade.vencendoEm30Dias.slice(0, filtroAtivo === 'proximo_vencimento' ? 6 : 3).map(produto => {
+                                const validadeInfo = verificarValidade(produto)
                                 return (
                                   <div key={produto.id} className="bg-white p-3 rounded-lg border border-blue-200">
                                     <p className="font-semibold text-gray-900 text-sm truncate">{produto.nome}</p>
-                                    <p className="text-xs text-blue-600"> {validadeInfo.textoVencimento}</p>
+                                    <p className="text-xs text-blue-600">{validadeInfo.textoVencimento}</p>
                                   </div>
                                 )
                               })}
                             </div>
                           </div>
                         )}
+
+                        {/* Link para ver todos quando não está no filtro específico */}
+                        {filtroAtivo !== 'proximo_vencimento' && totalProdutosComProblemaValidade > 9 && (
+                          <button 
+                            onClick={() => handleCardClick('proximo_vencimento')}
+                            className="text-orange-600 text-sm font-medium underline hover:no-underline"
+                          >
+                            Clique para ver todos os {totalProdutosComProblemaValidade} produtos com problemas de validade
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 🆕 MENSAGEM QUANDO NENHUM FILTRO APLICÁVEL */}
+                    {filtroAtivo === 'estoque_baixo' && produtosEstoqueBaixo.length === 0 && (
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4">🎉</div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Ótimas notícias!</h3>
+                        <p className="text-gray-600">Nenhum produto com estoque baixo encontrado.</p>
+                      </div>
+                    )}
+
+                    {filtroAtivo === 'estoque_zerado' && produtosEstoqueZerado.length === 0 && (
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4">🎉</div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Perfeito!</h3>
+                        <p className="text-gray-600">Nenhum produto com estoque zerado.</p>
+                      </div>
+                    )}
+
+                    {filtroAtivo === 'proximo_vencimento' && totalProdutosComProblemaValidade === 0 && (
+                      <div className="text-center py-8">
+                        <div className="text-6xl mb-4">🎉</div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Excelente!</h3>
+                        <p className="text-gray-600">Nenhum produto próximo ao vencimento.</p>
                       </div>
                     )}
                   </div>
@@ -550,7 +700,7 @@ export default function Dashboard() {
                   <div className="text-3xl">💡</div>
                   <div>
                     <h3 className="text-lg font-bold text-blue-800 mb-2">
-                      {user?.isMultiTenant ? '' : 'Sobre o Sistema'}
+                      {user?.isMultiTenant ? 'Sistema Multi-tenant' : 'Sobre o Sistema'}
                     </h3>
                     <div className="text-sm text-blue-700 space-y-2">
                       {user?.isMultiTenant ? (
@@ -567,6 +717,7 @@ export default function Dashboard() {
                           <p>• O lucro líquido detalhado está disponível nos relatórios</p>
                         </>
                       )}
+                      <p>• <strong>🆕 Cards filtráveis:</strong> Clique nos cards de alertas para filtrar visualizações específicas</p>
                       <p>• Todos os dados são sincronizados em tempo real com o Firebase</p>
                     </div>
                   </div>
