@@ -280,10 +280,10 @@ export default function Dashboard() {
         />
 
         {/* 🆕 Margem dinâmica baseada no estado da sidebar */}
-        <main className={`w-full py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
-          sidebarCollapsed
-           ? 'lg:ml-16 lg:mr-4' 
-            : 'lg:ml-64 lg:pr-4'
+        <main className={`py-4 sm:py-6 px-4 sm:px-6 lg:px-8 transition-all duration-300 ${
+        sidebarCollapsed
+        ? 'lg:ml-16' 
+        : 'lg:ml-64'
         }`}>
 
           {/* Loading State */}
