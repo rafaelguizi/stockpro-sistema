@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO INTEGRADA E CORRIGIDA COM MELHORIAS
+// src/app/produtos/page.tsx - VERSÃO FINAL INTEGRADA COM MOVIMENTAÇÕES
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -51,6 +51,29 @@ interface Produto {
   tamanho?: string
 }
 
+// 🆕 INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
+interface Movimentacao {
+  id: string
+  produto: string
+  codigo: string
+  produtoId: string
+  tipo: 'entrada' | 'saida'
+  quantidade: number
+  valorUnitario: number
+  valorTotal: number
+  data: string
+  hora: string
+  observacao: string
+  userId: string
+  codigoBarrasUsado?: string
+  clienteId?: string
+  clienteNome?: string
+  clienteCpfCnpj?: string
+  formaPagamento?: string
+  valorPago?: number
+  troco?: number
+}
+
 // Sistema de categorias inteligentes (MANTIDO ORIGINAL)
 interface CampoEspecifico {
   nome: string
@@ -68,16 +91,36 @@ interface CategoriaProduto {
   campos: CampoEspecifico[]
 }
 
-// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS DE BARRAS
+// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS DE BARRAS MELHORADO
 interface GerenciadorCodigosBarrasProps {
   codigos: string[]
   onChange: (codigos: string[]) => void
   disabled?: boolean
   onScanear?: () => void
+  produtoId?: string
+  ultimasMovimentacoes?: Movimentacao[]
 }
 
-function GerenciadorCodigosBarras({ codigos, onChange, disabled, onScanear }: GerenciadorCodigosBarrasProps) {
+function GerenciadorCodigosBarras({ 
+  codigos, 
+  onChange, 
+  disabled, 
+  onScanear,
+  produtoId,
+  ultimasMovimentacoes 
+}: GerenciadorCodigosBarrasProps) {
   const [novoCodigo, setNovoCodigo] = useState('')
+
+  // 🆕 VERIFICAR SE CÓDIGO FOI USADO RECENTEMENTE
+  const verificarUsoRecente = useCallback((codigo: string) => {
+    if (!ultimasMovimentacoes || !produtoId) return null
+
+    const usoRecente = ultimasMovimentacoes
+      .filter(mov => mov.produtoId === produtoId && mov.codigoBarrasUsado === codigo)
+      .sort((a, b) => new Date(b.data + ' ' + b.hora).getTime() - new Date(a.data + ' ' + a.hora).getTime())[0]
+
+    return usoRecente
+  }, [ultimasMovimentacoes, produtoId])
 
   const adicionarCodigo = () => {
     if (novoCodigo.trim() && !codigos.includes(novoCodigo.trim())) {
@@ -139,31 +182,49 @@ function GerenciadorCodigosBarras({ codigos, onChange, disabled, onScanear }: Ge
         <div className="space-y-2">
           <h6 className="text-sm font-bold text-gray-800">Códigos cadastrados ({codigos.length}):</h6>
           <div className="max-h-32 overflow-y-auto space-y-2 bg-gray-50 p-3 rounded-lg border">
-            {codigos.map((codigo, index) => (
-              <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
-                <span className="font-mono text-sm text-gray-900">{codigo}</span>
-                <div className="flex space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => replicarCodigo(codigo)}
-                    className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                    disabled={disabled}
-                    title="Replicar código"
-                  >
-                    📋
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removerCodigo(index)}
-                    className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                    disabled={disabled}
-                    title="Remover código"
-                  >
-                    ❌
-                  </button>
+            {codigos.map((codigo, index) => {
+              const usoRecente = verificarUsoRecente(codigo)
+              
+              return (
+                <div key={index} className={`flex items-center justify-between p-2 rounded border ${
+                  usoRecente ? 'bg-red-50 border-red-200' : 'bg-white'
+                }`}>
+                  <div className="flex-1">
+                    <span className="font-mono text-sm text-gray-900">{codigo}</span>
+                    {/* 🆕 ALERTA DE USO RECENTE */}
+                    {usoRecente && (
+                      <div className="text-xs text-red-600 mt-1 flex items-center">
+                        <span className="mr-1">⚠️</span>
+                        {usoRecente.tipo === 'saida' ? 'Removido' : 'Usado'} em {usoRecente.data}
+                        {usoRecente.tipo === 'saida' && (
+                          <span className="ml-1 font-bold">(Código não existe mais no produto)</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex space-x-1">
+                    <button
+                      type="button"
+                      onClick={() => replicarCodigo(codigo)}
+                      className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                      disabled={disabled}
+                      title="Replicar código"
+                    >
+                      📋
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removerCodigo(index)}
+                      className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      disabled={disabled}
+                      title="Remover código"
+                    >
+                      ❌
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -172,6 +233,9 @@ function GerenciadorCodigosBarras({ codigos, onChange, disabled, onScanear }: Ge
       <div className="text-xs text-gray-500 space-y-1">
         <p>💡 <strong>Dica:</strong> Use 📋 para replicar o mesmo código para várias unidades</p>
         <p>🎯 <strong>Exemplo:</strong> 3 Camparis com códigos diferentes, ou 5 refrigerantes iguais</p>
+        {produtoId && (
+          <p>🔄 <strong>Sincronização:</strong> Códigos são atualizados automaticamente quando usados em vendas</p>
+        )}
       </div>
     </div>
   )
@@ -490,11 +554,10 @@ export default function Produtos() {
   const { user } = useAuth()
   const toast = useToastContext()
   
-  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD)
+  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
-    // Escutar mudanças no localStorage para sincronizar
     const handleStorageChange = () => {
       const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
       if (collapsed !== null) {
@@ -502,13 +565,8 @@ export default function Produtos() {
       }
     }
 
-    // Verificar estado inicial
     handleStorageChange()
-
-    // Escutar mudanças
     window.addEventListener('storage', handleStorageChange)
-    
-    // Polling para mudanças na mesma aba (workaround)
     const interval = setInterval(handleStorageChange, 100)
 
     return () => {
@@ -523,13 +581,20 @@ export default function Produtos() {
     loading: loadingCategorias
   } = useFirestore<CategoriaFirestore>('categorias')
   
+  // 🆕 HOOK PARA MOVIMENTAÇÕES (PARA SINCRONIZAÇÃO)
+  const { 
+    data: movimentacoes,
+    loading: loadingMovimentacoes
+  } = useFirestore<Movimentacao>('movimentacoes')
+  
   // Hooks do Firestore
   const { 
     data: produtos, 
     loading: loadingProdutos, 
     addDocument, 
     updateDocument, 
-    deleteDocument 
+    deleteDocument,
+    refetch: refetchProdutos // 🆕 FUNÇÃO PARA RECARREGAR DADOS
   } = useFirestore<Produto>('produtos')
 
   const [showForm, setShowForm] = useState(false)
@@ -538,6 +603,8 @@ export default function Produtos() {
   const [novaCategoria, setNovaCategoria] = useState('')
   const [showScanner, setShowScanner] = useState(false)
   const [loading, setLoading] = useState(false)
+  // 🆕 ESTADO PARA CONTROLAR SINCRONIZAÇÃO
+  const [ultimaSincronizacao, setUltimaSincronizacao] = useState<Date>(new Date())
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -550,9 +617,9 @@ export default function Produtos() {
     nome: '',
     categoria: '',
     categoriaId: '',
-    codigosBarras: [] as string[],     // 🆕 Array de códigos
-    temCodigoBarras: true,             // �� Controle se usa código
-    isDestilado: false,                // 🆕 Bebida sem validade
+    codigosBarras: [] as string[],
+    temCodigoBarras: true,
+    isDestilado: false,
     estoqueMinimo: '',
     valorCompra: '',
     valorVenda: '',
@@ -571,6 +638,43 @@ export default function Produtos() {
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroValidade, setFiltroValidade] = useState('')
+
+  // 🆕 SINCRONIZAÇÃO AUTOMÁTICA COM MOVIMENTAÇÕES
+  useEffect(() => {
+    if (movimentacoes && produtos) {
+      const agora = new Date()
+      const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
+      const diferencaMinutos = diferencaMs / (1000 * 60)
+
+      // Se passou mais de 1 minuto desde a última sincronização, recarregar
+      if (diferencaMinutos > 1) {
+        console.log('🔄 Sincronizando dados de produtos com movimentações...')
+        refetchProdutos()
+        setUltimaSincronizacao(agora)
+      }
+    }
+  }, [movimentacoes, produtos, ultimaSincronizacao, refetchProdutos])
+
+  // 🆕 ALERTAS DE CÓDIGOS REMOVIDOS
+  useEffect(() => {
+    if (movimentacoes && produtos) {
+      // Verificar se há movimentações de saída recentes que removeram códigos
+      const movimentacoesRecentes = movimentacoes
+        .filter(mov => {
+          const dataMovimentacao = new Date(mov.data.split('/').reverse().join('-'))
+          const ontem = new Date()
+          ontem.setDate(ontem.getDate() - 1)
+          return dataMovimentacao >= ontem && mov.tipo === 'saida' && mov.codigoBarrasUsado
+        })
+
+      if (movimentacoesRecentes.length > 0) {
+        const codigosRemovidos = movimentacoesRecentes.length
+        if (codigosRemovidos > 0) {
+          console.log(`📱 ${codigosRemovidos} códigos foram removidos por movimentações recentes`)
+        }
+      }
+    }
+  }, [movimentacoes, produtos])
 
   // 🆕 CATEGORIAS ATIVAS FIRESTORE
   const categoriasAtivasFirestore = useMemo(() => {
@@ -592,7 +696,6 @@ export default function Produtos() {
       }
     }
     
-    // Fallback para produtos antigos ou categorias não encontradas
     return {
       id: '',
       nome: produto.categoria || 'Sem categoria',
@@ -662,26 +765,25 @@ export default function Produtos() {
         ...prev,
         categoria: categoria.nome,
         categoriaId: categoriaId,
-        temValidade: false, // Reset validade - será definida por destilado
-        isDestilado: false  // Reset destilado
+        temValidade: false,
+        isDestilado: false
       }))
       
-      // Limpar categoria inteligente quando selecionar Firestore
       setCategoriaSelecionada('')
       setCamposEspecificos({})
     }
   }
 
-  // 🆕 FUNÇÃO PARA LIDAR COM MUDANÇA DE CATEGORIA INTELIGENTE ATUALIZADA
+  // 🆕 FUNÇÃO PARA LIDAR COM MUDANÇA DE CATEGORIA INTELIGENTE
   const handleCategoriaChange = (nomeCategoria: string) => {
     const categoriaInteligente = CATEGORIAS_INTELIGENTES.find(cat => cat.nome === nomeCategoria)
     
     setFormData(prev => ({
       ...prev,
       categoria: nomeCategoria,
-      categoriaId: '', // Limpar categoria Firestore
+      categoriaId: '',
       temValidade: categoriaInteligente?.temValidade || false,
-      isDestilado: false // Reset destilado quando mudar categoria
+      isDestilado: false
     }))
     
     setCategoriaSelecionada(categoriaInteligente?.id || '')
@@ -695,7 +797,6 @@ export default function Produtos() {
       [campo]: valor
     }))
 
-    // Se for o campo nome, atualizar também o formData.nome
     if (campo === 'nome') {
       setFormData(prev => ({
         ...prev,
@@ -704,7 +805,7 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO PARA VALIDAR CÓDIGOS ÚNICOS
+  // 🆕 FUNÇÃO PARA VALIDAR CÓDIGOS ÚNICOS MELHORADA
   const validarCodigosUnicos = (novoscodigos: string[], produtoEditando?: string) => {
     if (!produtos) return true
 
@@ -749,7 +850,7 @@ export default function Produtos() {
     setShowScanner(false)
   }
 
-  // 🆕 FUNÇÃO SIMULAR LEITURA ATUALIZADA PARA MÚLTIPLOS CÓDIGOS
+  // 🆕 FUNÇÃO SIMULAR LEITURA ATUALIZADA
   const simularLeituraCodigoBarras = () => {
     const codigoSimulado = Math.random().toString().substr(2, 13)
     const novoscodigos = [...formData.codigosBarras, codigoSimulado]
@@ -767,9 +868,9 @@ export default function Produtos() {
       nome: '',
       categoria: '',
       categoriaId: '',
-      codigosBarras: [],        // 🆕 Array vazio
-      temCodigoBarras: true,    // 🆕 Default true
-      isDestilado: false,       // 🆕 Default false
+      codigosBarras: [],
+      temCodigoBarras: true,
+      isDestilado: false,
       estoqueMinimo: '',
       valorCompra: '',
       valorVenda: '',
@@ -809,7 +910,7 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO handleSubmit ATUALIZADA COM NOVAS VALIDAÇÕES
+  // 🆕 FUNÇÃO handleSubmit ATUALIZADA
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -820,25 +921,21 @@ export default function Produtos() {
 
     setLoading(true)
     try {
-      // Validações
       const nomeParaValidar = camposEspecificos.nome || formData.nome
       if (!nomeParaValidar || !formData.categoria) {
         toast.error('Campos obrigatórios', 'Preencha nome e categoria!')
         return
       }
 
-      // 🆕 VALIDAÇÃO DE CÓDIGOS DE BARRAS
       if (formData.temCodigoBarras && formData.codigosBarras.length === 0) {
         toast.warning('Código de barras obrigatório', 'Adicione pelo menos um código de barras ou desmarque a opção!')
         return
       }
 
-      // 🆕 VALIDAR CÓDIGOS ÚNICOS
       if (formData.temCodigoBarras && !validarCodigosUnicos(formData.codigosBarras, editingId || undefined)) {
         return
       }
 
-      // Validar campos específicos obrigatórios
       const categoriaInteligente = buscarCategoria(categoriaSelecionada)
       if (categoriaInteligente) {
         const camposObrigatorios = categoriaInteligente.campos.filter(campo => campo.obrigatorio)
@@ -866,7 +963,6 @@ export default function Produtos() {
         return
       }
 
-      // �� VALIDAÇÃO DE VALIDADE CONDICIONAL
       const temValidadeReal = formData.temValidade && !formData.isDestilado
       
       if (temValidadeReal && formData.dataValidade) {
@@ -883,7 +979,6 @@ export default function Produtos() {
         }
       }
 
-      // 🆕 OBJETO PRODUTO ATUALIZADO
       const dadosBasicos = {
         codigo: editingId ?
           produtos?.find(p => p.id === editingId)?.codigo || gerarProximoCodigo() :
@@ -904,15 +999,12 @@ export default function Produtos() {
         userId: user.uid
       }
 
-      // 🆕 CAMPOS OPCIONAIS ATUALIZADOS
       const camposOpcionais: Partial<Produto> = {}
 
-      // CategoriaId
       if (formData.categoriaId && formData.categoriaId.trim() !== '') {
         camposOpcionais.categoriaId = formData.categoriaId
       }
 
-      // Campos básicos opcionais (só se não tiver campos específicos)
       if (!categoriaSelecionada) {
         if (formData.marca && formData.marca.trim() !== '') {
           camposOpcionais.marca = formData.marca
@@ -928,7 +1020,6 @@ export default function Produtos() {
         }
       }
 
-      // 🆕 CAMPOS DE VALIDADE CONDICIONAIS
       if (temValidadeReal) {
         camposOpcionais.temValidade = true
         if (formData.dataValidade && formData.dataValidade.trim() !== '') {
@@ -939,7 +1030,6 @@ export default function Produtos() {
         camposOpcionais.temValidade = false
       }
 
-      // Campos específicos
       if (Object.keys(camposEspecificos).length > 0) {
         const camposEspecificosFiltrados = Object.fromEntries(
           Object.entries(camposEspecificos).filter(([_, value]) => 
@@ -951,7 +1041,6 @@ export default function Produtos() {
         }
       }
 
-      // 🆕 COMBINAR DADOS E FILTRAR UNDEFINED
       const novoProduto = { ...dadosBasicos, ...camposOpcionais }
 
       const produtoLimpo = Object.fromEntries(
@@ -968,6 +1057,12 @@ export default function Produtos() {
         toast.success('Produto cadastrado!', `Código ${produtoLimpo.codigo} criado!`)
       }
 
+      // 🆕 FORÇAR RECARREGAMENTO APÓS SALVAR
+      setTimeout(() => {
+        refetchProdutos()
+        setUltimaSincronizacao(new Date())
+      }, 500)
+
       resetForm()
     } catch (error) {
       console.error('Erro ao salvar produto:', error)
@@ -977,10 +1072,29 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO handleEdit ATUALIZADA
+  // 🆕 FUNÇÃO handleEdit ATUALIZADA COM VALIDAÇÃO DE SINCRONIZAÇÃO
   const handleEdit = async (produto: Produto) => {
     setLoading(true)
     try {
+      // 🆕 VERIFICAR SE PRODUTO AINDA EXISTE E TEM OS MESMOS CÓDIGOS
+      if (movimentacoes) {
+        const movimentacoesRecentes = movimentacoes
+          .filter(mov => mov.produtoId === produto.id && mov.tipo === 'saida' && mov.codigoBarrasUsado)
+          .sort((a, b) => new Date(b.data + ' ' + b.hora).getTime() - new Date(a.data + ' ' + a.hora).getTime())
+
+        if (movimentacoesRecentes.length > 0) {
+          const codigosRemovidos = movimentacoesRecentes.map(mov => mov.codigoBarrasUsado).filter(Boolean)
+          if (codigosRemovidos.length > 0) {
+            toast.info(
+              'Códigos foram removidos', 
+              `${codigosRemovidos.length} código(s) foram removidos por vendas recentes. Os dados serão atualizados.`
+            )
+            // Forçar recarregamento antes de editar
+            await refetchProdutos()
+          }
+        }
+      }
+
       await new Promise(resolve => setTimeout(resolve, 400))
 
       const categoriaInteligente = CATEGORIAS_INTELIGENTES.find(cat => cat.nome === produto.categoria)
@@ -989,9 +1103,9 @@ export default function Produtos() {
         nome: produto.nome,
         categoria: produto.categoria,
         categoriaId: produto.categoriaId || '',
-        codigosBarras: produto.codigosBarras || [],      // 🆕 Carregar códigos
-        temCodigoBarras: produto.temCodigoBarras ?? true, // 🆕 Carregar flag
-        isDestilado: produto.isDestilado || false,        // 🆕 Carregar destilado
+        codigosBarras: produto.codigosBarras || [],
+        temCodigoBarras: produto.temCodigoBarras ?? true,
+        isDestilado: produto.isDestilado || false,
         estoqueMinimo: produto.estoqueMinimo.toString(),
         valorCompra: produto.valorCompra.toString(),
         valorVenda: produto.valorVenda.toString(),
@@ -1007,7 +1121,6 @@ export default function Produtos() {
 
       setCategoriaSelecionada(categoriaInteligente?.id || '')
       
-      // Se tem campos específicos, incluir o nome neles
       const camposComNome = produto.camposEspecificos || {}
       if (categoriaInteligente && !camposComNome.nome) {
         camposComNome.nome = produto.nome
@@ -1027,6 +1140,12 @@ export default function Produtos() {
       try {
         await deleteDocument(id)
         toast.success('Produto excluído!', 'Produto removido com sucesso!')
+        
+        // 🆕 FORÇAR RECARREGAMENTO APÓS EXCLUSÃO
+        setTimeout(() => {
+          refetchProdutos()
+          setUltimaSincronizacao(new Date())
+        }, 500)
       } catch (error) {
         console.error('Erro ao excluir produto:', error)
         toast.error('Erro ao excluir', 'Não foi possível excluir o produto!')
@@ -1051,6 +1170,12 @@ export default function Produtos() {
         `Produto ${novoStatus ? 'ativado' : 'desativado'}!`,
         `Status alterado com sucesso!`
       )
+
+      // 🆕 FORÇAR RECARREGAMENTO APÓS ALTERAR STATUS
+      setTimeout(() => {
+        refetchProdutos()
+        setUltimaSincronizacao(new Date())
+      }, 500)
     } catch (error) {
       console.error('Erro ao alterar status:', error)
       toast.error('Erro ao alterar status', 'Não foi possível alterar o status!')
@@ -1059,7 +1184,7 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FILTRAR PRODUTOS ATUALIZADO COM MÚLTIPLOS CÓDIGOS
+  // 🆕 FILTRAR PRODUTOS ATUALIZADO
   const produtosFiltrados = produtos ? produtos.filter(produto => {
     const matchBusca = produto.nome.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.codigo.toLowerCase().includes(busca.toLowerCase()) ||
@@ -1150,7 +1275,28 @@ export default function Produtos() {
                   </div>
                 </div>
                 <p className="text-gray-700 font-bold text-lg">Carregando produtos...</p>
-                <p className="text-gray-500 text-sm mt-2">Sincronizando dados do Firebase</p>
+                <p className="text-gray-500 text-sm mt-2">Sincronizando dados com movimentações</p>
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 ALERTA DE SINCRONIZAÇÃO ATIVA */}
+          {!loadingProdutos && !loadingMovimentacoes && movimentacoes && (
+            <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 animate-slide-up">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <span className="text-2xl">🔄</span>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-green-800">
+                    Sistema Sincronizado com Movimentações
+                  </h3>
+                  <div className="mt-2 text-sm text-green-700">
+                    <p>✅ Produtos atualizados automaticamente quando códigos são usados em vendas</p>
+                    <p>📱 {movimentacoes.filter(m => m.codigoBarrasUsado).length} movimentações com códigos específicos registradas</p>
+                    <p>🕒 Última sincronização: {ultimaSincronizacao.toLocaleTimeString('pt-BR')}</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1190,7 +1336,10 @@ export default function Produtos() {
           {/* Header com botões */}
           {!loadingProdutos && (
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 animate-fade-in">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Controle de Produtos</h1>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Controle de Produtos</h1>
+                <p className="text-sm text-gray-600 mt-1">Sistema integrado com múltiplos códigos e sincronização automática</p>
+              </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                 <LoadingButton
                   onClick={() => router.push('/categorias')}
@@ -1199,6 +1348,14 @@ export default function Produtos() {
                   className="w-full sm:w-auto"
                 >
                   📂 Categorias
+                </LoadingButton>
+                <LoadingButton
+                  onClick={() => router.push('/movimentacoes')}
+                  variant="success"
+                  size="md"
+                  className="w-full sm:w-auto"
+                >
+                  📋 Movimentações
                 </LoadingButton>
                 <LoadingButton
                   onClick={() => router.push('/pdv')}
@@ -1230,7 +1387,7 @@ export default function Produtos() {
                   <label className="block text-sm font-bold text-gray-800 mb-2">Buscar</label>
                   <input
                     type="text"
-                    placeholder="Nome, código, marca..."
+                    placeholder="Nome, código, marca, código de barras..."
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
                     className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm placeholder-gray-600 transition-all duration-200"
@@ -1310,9 +1467,10 @@ export default function Produtos() {
                 <div className="flex items-center space-x-4 text-sm">
                   <span className="text-blue-600">📱 {produtos.filter(p => p.codigosBarras?.length > 0).length} com código</span>
                   <span className="text-orange-600">📅 {estatisticasValidade.comValidade} com validade</span>
+                  <span className="text-purple-600">🥃 {produtos.filter(p => p.isDestilado).length} destilados</span>
                   {(estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje) > 0 && (
                     <span className="text-red-600 font-medium">
-                      🚨 {estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje} críticos
+                      �� {estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje} críticos
                     </span>
                   )}
                 </div>
@@ -1320,13 +1478,18 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 FORMULÁRIO ATUALIZADO COM TODAS AS MELHORIAS */}
+          {/* 🆕 FORMULÁRIO ATUALIZADO COM SINCRONIZAÇÃO */}
           {showForm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b">
                   <h3 className="text-lg font-bold text-gray-900">
                     {editingId ? '✏️ Editar Produto' : '➕ Novo Produto'}
+                    {editingId && movimentacoes && (
+                      <span className="text-sm font-normal text-gray-600 block">
+                        🔄 Dados sincronizados com movimentações
+                      </span>
+                    )}
                   </h3>
                   <button
                     onClick={resetForm}
@@ -1627,10 +1790,10 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* 🆕 GERENCIADOR DE CÓDIGOS DE BARRAS */}
+                  {/* 🆕 GERENCIADOR DE CÓDIGOS DE BARRAS MELHORADO */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">📱 Códigos de Barras</h4>
+                      <h4 className="text-lg font-bold text-gray-900">�� Códigos de Barras</h4>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1656,6 +1819,8 @@ export default function Produtos() {
                         }))}
                         disabled={loading}
                         onScanear={iniciarScanner}
+                        produtoId={editingId || undefined}
+                        ultimasMovimentacoes={movimentacoes || undefined}
                       />
                     ) : (
                       <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -1815,7 +1980,6 @@ export default function Produtos() {
                     />
                     <canvas ref={canvasRef} className="hidden" />
 
-                    {/* Overlay de mira */}
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="border-2 border-red-500 w-48 h-24 rounded-lg animate-pulse"></div>
                     </div>
@@ -1852,7 +2016,7 @@ export default function Produtos() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
                   <p className="text-gray-500 mb-4">
                     {!produtos || produtos.length === 0
-                      ? 'Comece cadastrando seu primeiro produto.'
+                      ? 'Comece cadastrando seu primeiro produto com múltiplos códigos.'
                       : 'Tente ajustar os filtros para encontrar os produtos desejados.'
                     }
                   </p>
@@ -2114,12 +2278,23 @@ export default function Produtos() {
                                 </div>
                               </td>
                               
-                              {/* 🆕 COLUNA CÓDIGOS MÚLTIPLOS */}
+                              {/* 🆕 COLUNA CÓDIGOS MÚLTIPLOS ATUALIZADA */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                 {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
                                   <div>
-                                    <div className="font-bold text-blue-600 mb-1">
-                                      {produto.codigosBarras.length} código(s)
+                                    <div className="font-bold text-blue-600 mb-1 flex items-center">
+                                      📱 {produto.codigosBarras.length} código(s)
+                                      {/* 🆕 INDICADOR DE SINCRONIZAÇÃO */}
+                                      {movimentacoes && movimentacoes.some(mov => 
+                                        mov.produtoId === produto.id && 
+                                        mov.tipo === 'saida' && 
+                                        mov.codigoBarrasUsado &&
+                                        new Date(mov.data.split('/').reverse().join('-')) >= new Date(Date.now() - 24*60*60*1000)
+                                      ) && (
+                                        <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-1 py-0.5 rounded">
+                                          🔄 Atualizado
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="space-y-1 max-h-20 overflow-y-auto">
                                       {produto.codigosBarras.slice(0, 3).map((codigo, index) => (
@@ -2311,7 +2486,7 @@ export default function Produtos() {
               </div>
 
               {/* 🆕 RESUMO DE CÓDIGOS E DESTILADOS */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="text-xl font-bold text-blue-600">
                     {produtos.reduce((total, p) => total + (p.codigosBarras?.length || 0), 0)}
@@ -2331,6 +2506,14 @@ export default function Produtos() {
                     {produtos.filter(p => !p.temCodigoBarras).length}
                   </div>
                   <div className="text-gray-600 text-sm font-medium">Sem Código</div>
+                </div>
+
+                {/* 🆕 ESTATÍSTICA DE SINCRONIZAÇÃO */}
+                <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-xl font-bold text-green-600">
+                    {movimentacoes ? movimentacoes.filter(m => m.codigoBarrasUsado).length : 0}
+                  </div>
+                  <div className="text-green-600 text-sm font-medium">Códigos Utilizados</div>
                 </div>
               </div>
 
@@ -2360,26 +2543,29 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA ATUALIZADO */}
-          <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-xl p-6 animate-fade-in">
+          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA TOTALMENTE INTEGRADO */}
+          <div className="mt-6 bg-green-50 border-2 border-green-200 rounded-xl p-6 animate-fade-in">
             <div className="flex">
               <div className="flex-shrink-0">
-                <div className="text-3xl">🚀</div>
+                <div className="text-3xl">🎯</div>
               </div>
               <div className="ml-4">
-                <h3 className="text-lg font-bold text-blue-800 mb-2">
-                  Sistema Avançado de Produtos com Múltiplos Códigos
+                <h3 className="text-lg font-bold text-green-800 mb-2">
+                  Sistema Completo: Produtos ↔ Movimentações ↔ PDV
                 </h3>
-                <div className="text-sm text-blue-700 space-y-2">
+                <div className="text-sm text-green-700 space-y-2">
+                  <p>• <strong>🔄 Sincronização em tempo real:</strong> Produtos atualizam automaticamente quando códigos são usados</p>
                   <p>• <strong>🏷️ Múltiplos códigos por produto:</strong> Cadastre vários códigos para o mesmo item</p>
                   <p>• <strong>📋 Replicação inteligente:</strong> Clone códigos iguais para múltiplas unidades</p>
+                  <p>• <strong>🗑️ Remoção automática:</strong> Códigos usados em vendas são removidos automaticamente do produto</p>
                   <p>• <strong>🥃 Destilados sem validade:</strong> Bebidas destiladas automaticamente sem data de vencimento</p>
                   <p>• <strong>📝 Produtos sem código:</strong> Para itens avulsos como balas soltas, cigarros avulsos</p>
                   <p>• <strong>📱 Scanner integrado:</strong> Use a câmera para escanear códigos diretamente</p>
-                  <p>• <strong>✅ Validação inteligente:</strong> Sistema impede códigos duplicados</p>
+                  <p>• <strong>✅ Validação inteligente:</strong> Sistema impede códigos duplicados entre produtos</p>
                   <p>• <strong>🎨 Visual por categoria:</strong> Cores e ícones para fácil identificação</p>
                   <p>• <strong>📊 Controle de validade condicional:</strong> Apenas produtos que realmente precisam</p>
-                  <p>• <strong>🔄 Integração total:</strong> Funciona perfeitamente com PDV e movimentações</p>
+                  <p>• <strong>🔔 Alertas visuais:</strong> Indicadores quando códigos foram removidos por vendas</p>
+                  <p>• <strong>⚡ Refresh automático:</strong> Dados sempre atualizados entre todas as telas</p>
                 </div>
               </div>
             </div>
