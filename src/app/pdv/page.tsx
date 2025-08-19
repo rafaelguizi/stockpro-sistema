@@ -22,7 +22,7 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// �� INTERFACE PRODUTO CORRIGIDA
+// 🆕 INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
@@ -770,7 +770,7 @@ export default function PDV() {
       const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
       const valorDesconto = obterValorDesconto()
 
-      // �� CRIAR MOVIMENTAÇÕES COM SISTEMA DE CONTAGEM
+      //📋 CRIAR MOVIMENTAÇÕES COM SISTEMA DE CONTAGEM
       const movimentacoesPromises = itensVenda.map(item => {
         let observacao = vendaAtiva 
           ? `Venda PDV - Modo Ativo` 
@@ -1561,7 +1561,7 @@ export default function PDV() {
                             className="w-full"
                             disabled={produtosAtivos.length === 0}
                           >
-                            �� Buscar
+                            🔍 Buscar
                           </LoadingButton>
                           <LoadingButton
                             type="button"
@@ -1571,7 +1571,7 @@ export default function PDV() {
                             className="w-full"
                             disabled={produtosAtivos.length === 0}
                           >
-                            �� Câmera
+                            📷 Câmera
                           </LoadingButton>
                         </div>
                       </form>
@@ -1602,7 +1602,7 @@ export default function PDV() {
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold mr-4 ${
                               clienteSelecionado.ativo ? 'bg-green-500' : 'bg-gray-400'
                             }`}>
-                              {clienteSelecionado.tipoCliente === 'pessoa_fisica' ? '��' : '🏢'}
+                              {clienteSelecionado.tipoCliente === 'pessoa_fisica' ? '👥' : '🏢'}
                             </div>
                             <div>
                               <h4 className={`font-bold ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
@@ -1683,7 +1683,7 @@ export default function PDV() {
                   {/* Desconto inteligente (MANTIDO ORIGINAL) */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                      �� Desconto na Venda
+                      💸 Desconto na Venda
                     </h3>
                     
                     <div className="flex mb-4 bg-gray-100 rounded-lg p-1">
@@ -1864,7 +1864,7 @@ export default function PDV() {
                             ? modoNoturno ? 'text-green-100' : 'text-green-600'
                             : modoNoturno ? 'text-gray-300' : 'text-gray-600'
                         }`}>
-                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '�� FILTRO' : mostrarProdutosSemCodigo ? '📝 SEM CÓDIGO' : '⏸️ Manual'}
+                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '📂 FILTRO' : mostrarProdutosSemCodigo ? '📝 SEM CÓDIGO' : '⏸️ Manual'}
                         </span>
                       </div>
 

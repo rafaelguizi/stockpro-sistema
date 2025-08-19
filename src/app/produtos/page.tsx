@@ -22,7 +22,7 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// �� INTERFACE PRODUTO CORRIGIDA
+// 🆕 INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
@@ -929,7 +929,7 @@ export default function Produtos() {
       nome: '',
       categoria: '',
       categoriaId: '',
-      codigosBarras: {},  // �� Objeto vazio
+      codigosBarras: {},  // 🆕 Objeto vazio
       temCodigoBarras: true,
       isDestilado: false,
       estoqueMinimo: '',

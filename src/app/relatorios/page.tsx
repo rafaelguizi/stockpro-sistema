@@ -2398,7 +2398,7 @@ export default function Relatorios() {
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <h4 className={`font-bold ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>�� Oportunidades</h4>
+                    <h4 className={`font-bold ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>🎯 Oportunidades</h4>
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2">
                         <span className="text-blue-500">→</span>

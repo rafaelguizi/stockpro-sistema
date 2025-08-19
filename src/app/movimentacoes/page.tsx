@@ -22,7 +22,7 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// �� INTERFACE PRODUTO CORRIGIDA
+// 🆕 INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
