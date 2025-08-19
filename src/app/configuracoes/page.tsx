@@ -9,6 +9,7 @@ import MobileHeader from '@/components/MobileHeader'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import Image from 'next/image'
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, User as FirebaseUser } from 'firebase/auth'
+import { auth } from '@/lib/firebase' // ✅ IMPORT ADICIONADO
 
 interface ConfiguracaoEmpresa {
   id?: string
@@ -291,7 +292,7 @@ export default function Configuracoes() {
     }
   }, [dadosNotificacao, user, configuracaoNotificacao, updateConfigNotificacao, addConfigNotificacao, toast])
 
-  // Alterar senha
+  // ✅ FUNÇÃO CORRIGIDA - Alterar senha
   const alterarSenha = useCallback(async () => {
     if (!user || !senhaAtual || !novaSenha || !confirmarSenha) {
       toast.warning('Campos obrigatórios', 'Preencha todos os campos de senha')
@@ -310,10 +311,18 @@ export default function Configuracoes() {
 
     setLoading(true)
     try {
-      const credential = EmailAuthProvider.credential(user.email!, senhaAtual)
-      // ✅ Cast para FirebaseUser para resolver conflito de tipos
-      await reauthenticateWithCredential(user as FirebaseUser, credential)
-      await updatePassword(user as FirebaseUser, novaSenha)
+      // ✅ CORREÇÃO: Usar Firebase User original
+      const firebaseUser = auth.currentUser
+      if (!firebaseUser) {
+        throw new Error('Usuário não autenticado no Firebase')
+      }
+
+      // Reautenticar com senha atual
+      const credential = EmailAuthProvider.credential(firebaseUser.email!, senhaAtual)
+      await reauthenticateWithCredential(firebaseUser, credential)
+      
+      // Trocar para nova senha
+      await updatePassword(firebaseUser, novaSenha)
       
       setSenhaAtual('')
       setNovaSenha('')
@@ -324,6 +333,8 @@ export default function Configuracoes() {
       const firebaseError = error as { code?: string }
       if (firebaseError.code === 'auth/wrong-password') {
         toast.error('Senha atual incorreta', 'Verifique sua senha atual e tente novamente')
+      } else if (firebaseError.code === 'auth/weak-password') {
+        toast.error('Senha muito fraca', 'Nova senha deve ter pelo menos 6 caracteres')
       } else {
         toast.error('Erro ao alterar senha', 'Não foi possível alterar sua senha')
       }
@@ -1336,10 +1347,12 @@ export default function Configuracoes() {
                       <input
                         type="text"
                         value={(() => {
-                         const metadata = (user as FirebaseUser)?.metadata; 
-                         return metadata?.creationTime ? new Date(metadata.creationTime).toLocaleDateString('pt-BR') : 'N/A';
+                          // ✅ CORREÇÃO: Usar auth.currentUser para acessar metadata
+                          const firebaseUser = auth.currentUser
+                          return firebaseUser?.metadata?.creationTime 
+                            ? new Date(firebaseUser.metadata.creationTime).toLocaleDateString('pt-BR') 
+                            : 'N/A'
                         })()}
-
                         disabled
                         className={`w-full border rounded-lg px-3 py-2 bg-gray-100 cursor-not-allowed ${
                           modoNoturno 
@@ -1356,10 +1369,12 @@ export default function Configuracoes() {
                       <input
                         type="text"
                         value={(() => {
-                         const metadata = (user as FirebaseUser)?.metadata;
-                         return metadata?.lastSignInTime ? new Date(metadata.lastSignInTime).toLocaleString('pt-BR') : 'N/A';
+                          // ✅ CORREÇÃO: Usar auth.currentUser para acessar metadata
+                          const firebaseUser = auth.currentUser
+                          return firebaseUser?.metadata?.lastSignInTime 
+                            ? new Date(firebaseUser.metadata.lastSignInTime).toLocaleString('pt-BR') 
+                            : 'N/A'
                         })()}
-
                         disabled
                         className={`w-full border rounded-lg px-3 py-2 bg-gray-100 cursor-not-allowed ${
                           modoNoturno 
@@ -1502,7 +1517,7 @@ export default function Configuracoes() {
                       className="w-full"
                       disabled={!senhaAtual || !novaSenha || !confirmarSenha || novaSenha !== confirmarSenha}
                     >
-                      🔑 Alterar Senha
+                      �� Alterar Senha
                     </LoadingButton>
                   </div>
                 </div>

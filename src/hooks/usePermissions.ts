@@ -158,15 +158,15 @@ export function usePermissions(): { permissions: Permissions; limits: UserLimits
         return {
           canViewCosts: false, // 🚫 Não vê custos
           canViewProfits: false, // 🚫 Não vê lucros  
-          canViewMargins: false, // �� Não vê margens
-          canManageUsers: false, // �� Não gerencia usuários
+          canViewMargins: false, // 🚫 Não vê margens
+          canManageUsers: false, // 🚫 Não gerencia usuários
           canViewUsers: true, // ✅ Pode ver lista de usuários
           canCreateUsers: false,
           canDeleteUsers: false,
           canManageProducts: true, // ✅ Pode gerenciar produtos
           canViewProducts: true,
           canCreateProducts: true,
-          canDeleteProducts: false, // �� Não pode deletar
+          canDeleteProducts: false, // 🚫 Não pode deletar
           canEditPrices: false, // 🚫 Não edita preços
           canViewFullReports: false, // 🚫 Não vê relatórios completos
           canViewBasicReports: true, // ✅ Relatórios básicos
@@ -175,11 +175,11 @@ export function usePermissions(): { permissions: Permissions; limits: UserLimits
           canMakeSales: true, // ✅ Pode vender
           canApplyDiscounts: true, // ✅ Pode dar desconto (limitado)
           canCancelSales: false, // 🚫 Não cancela vendas
-          canAccessSettings: false, // �� Não acessa configurações
+          canAccessSettings: false, // 🚫 Não acessa configurações
           canEditCompanyInfo: false,
           canManagePlans: false,
           canManageCustomers: true, // ✅ Gerencia clientes
-          canManageSuppliers: false, // �� Não gerencia fornecedores
+          canManageSuppliers: false, // 🚫 Não gerencia fornecedores
           canViewCustomers: true,
           canViewSuppliers: true // ✅ Só visualiza fornecedores
         }
