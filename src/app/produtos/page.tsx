@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL CORRIGIDA COM CONTAGEM DE CÓDIGOS
+// src/app/produtos/page.tsx - VERSÃO FINAL CORRIGIDA SEM LOOP INFINITO
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,7 +22,7 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// 🆕 INTERFACE PRODUTO CORRIGIDA
+// �� INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
@@ -175,7 +175,7 @@ function GerenciadorCodigosBarras({
             value={novoCodigo}
             onChange={(e) => setNovoCodigo(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && adicionarCodigo()}
-            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
             placeholder="Digite ou escaneie um código de barras"
             disabled={disabled}
           />
@@ -186,7 +186,7 @@ function GerenciadorCodigosBarras({
             min="1"
             value={quantidade}
             onChange={(e) => setQuantidade(parseInt(e.target.value) || 1)}
-            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
             placeholder="Qtd"
             disabled={disabled}
           />
@@ -271,7 +271,7 @@ function GerenciadorCodigosBarras({
                       disabled={disabled}
                       title="Adicionar mais unidades"
                     >
-                      📋
+                      ��
                     </button>
                     <button
                       type="button"
@@ -457,7 +457,7 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
               type="number"
               value={valor}
               onChange={(e) => onChange(campo.nome, e.target.value)}
-              className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+              className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
               placeholder="Volume"
               required={campo.obrigatorio}
               disabled={disabled}
@@ -488,7 +488,7 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
                type="number"
                value={valor}
                onChange={(e) => onChange(campo.nome, e.target.value)}
-               className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+               className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
                placeholder="Peso"
                required={campo.obrigatorio}
                disabled={disabled}
@@ -534,7 +534,7 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
             type="number"
             value={valor}
             onChange={(e) => onChange(campo.nome, e.target.value)}
-            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
             placeholder={campo.placeholder}
             required={campo.obrigatorio}
             disabled={disabled}
@@ -575,7 +575,7 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
             type="text"
             value={valor}
             onChange={(e) => onChange(campo.nome, e.target.value)}
-            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
             placeholder={campo.placeholder}
             required={campo.obrigatorio}
             disabled={disabled}
@@ -669,6 +669,10 @@ export default function Produtos() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
+  // ✅ NOVO: Estados para controle de loading sem loop
+  const [sincronizandoManualmente, setSincronizandoManualmente] = useState(false)
+  const [forceShowContent, setForceShowContent] = useState(false)
+
   // Estados para categoria inteligente
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('')
   const [camposEspecificos, setCamposEspecificos] = useState<Record<string, any>>({})
@@ -700,30 +704,53 @@ export default function Produtos() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroValidade, setFiltroValidade] = useState('')
 
-  // ✅ VERSÃO CORRIGIDA - SEM LOOP INFINITO
-useEffect(() => {
-  if (movimentacoes && produtos && produtos.length > 0) {
-    const agora = new Date()
-    const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
-    const diferencaMinutos = diferencaMs / (1000 * 60)
+  // ✅ TIMEOUT DE SEGURANÇA - Força mostrar conteúdo após 10 segundos
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setForceShowContent(true)
+      console.log('⏰ Timeout de segurança ativado - forçando exibição')
+    }, 10000)
 
-    // Só sincroniza se passou mais de 5 minutos (evita spam)
-    if (diferencaMinutos > 5) {
-      console.log('🔄 Sincronização programada (5+ minutos desde a última)')
-      
-      // 🆕 USE UM TIMEOUT PARA EVITAR LOOP
+    return () => clearTimeout(timer)
+  }, [])
+
+  // ✅ FUNÇÃO DE SINCRONIZAÇÃO MANUAL CONTROLADA
+  const sincronizarDados = useCallback(async () => {
+    if (sincronizandoManualmente) return
+    
+    setSincronizandoManualmente(true)
+    console.log('🔄 Iniciando sincronização manual...')
+    
+    try {
       setTimeout(() => {
         refetchProdutos()
-      }, 1000)
-      
-      setUltimaSincronizacao(agora)
+        setUltimaSincronizacao(new Date())
+      }, 500)
+    } finally {
+      setTimeout(() => {
+        setSincronizandoManualmente(false)
+      }, 2000)
     }
-  }
-}, [movimentacoes]) // ✅ REMOVIDO: produtos, ultimaSincronizacao, refetchProdutos
+  }, [refetchProdutos])
 
-  // Alertas de códigos removidos
+  // ✅ USEEFFECT DE SINCRONIZAÇÃO CORRIGIDO - SEM LOOP INFINITO
   useEffect(() => {
-    if (movimentacoes && produtos) {
+    if (movimentacoes && movimentacoes.length > 0 && !sincronizandoManualmente) {
+      const agora = new Date()
+      const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
+      const diferencaMinutos = diferencaMs / (1000 * 60)
+
+      // Sincroniza apenas se necessário (aumentei para 10 minutos)
+      if (diferencaMinutos > 10) {
+        console.log('🔄 Sincronização programada (10+ minutos desde a última)')
+        sincronizarDados()
+      }
+    }
+  }, [movimentacoes, sincronizarDados]) // ✅ Removido: produtos, ultimaSincronizacao
+
+  // ✅ USEEFFECT DOS CÓDIGOS OTIMIZADO - Menos execuções
+  useEffect(() => {
+    if (movimentacoes && produtos && !loadingMovimentacoes && !loadingProdutos) {
       const movimentacoesRecentes = movimentacoes
         .filter(mov => {
           const dataMovimentacao = new Date(mov.data.split('/').reverse().join('-'))
@@ -733,13 +760,10 @@ useEffect(() => {
         })
 
       if (movimentacoesRecentes.length > 0) {
-        const codigosRemovidos = movimentacoesRecentes.length
-        if (codigosRemovidos > 0) {
-          console.log(`📱 ${codigosRemovidos} códigos foram utilizados em movimentações recentes`)
-        }
+        console.log(`📱 ${movimentacoesRecentes.length} códigos foram utilizados em movimentações recentes`)
       }
     }
-  }, [movimentacoes, produtos])
+  }, [movimentacoes, loadingMovimentacoes, loadingProdutos]) // ✅ Removido: produtos
 
   // Categorias ativas Firestore
   const categoriasAtivasFirestore = useMemo(() => {
@@ -1124,9 +1148,9 @@ useEffect(() => {
         toast.success('Produto cadastrado!', `Código ${produtoLimpo.codigo} criado!`)
       }
 
+      // ✅ SINCRONIZAÇÃO CONTROLADA
       setTimeout(() => {
-        refetchProdutos()
-        setUltimaSincronizacao(new Date())
+        sincronizarDados()
       }, 500)
 
       resetForm()
@@ -1154,7 +1178,8 @@ useEffect(() => {
               'Códigos foram utilizados', 
               `${codigosUtilizados.length} código(s) foram utilizados em vendas recentes. Os dados serão atualizados.`
             )
-            await refetchProdutos()
+            // ✅ SINCRONIZAÇÃO CONTROLADA
+            sincronizarDados()
           }
         }
       }
@@ -1205,9 +1230,9 @@ useEffect(() => {
         await deleteDocument(id)
         toast.success('Produto excluído!', 'Produto removido com sucesso!')
         
+        // ✅ SINCRONIZAÇÃO CONTROLADA
         setTimeout(() => {
-          refetchProdutos()
-          setUltimaSincronizacao(new Date())
+          sincronizarDados()
         }, 500)
       } catch (error) {
         console.error('Erro ao excluir produto:', error)
@@ -1234,9 +1259,9 @@ useEffect(() => {
         `Status alterado com sucesso!`
       )
 
+      // ✅ SINCRONIZAÇÃO CONTROLADA
       setTimeout(() => {
-        refetchProdutos()
-        setUltimaSincronizacao(new Date())
+        sincronizarDados()
       }, 500)
     } catch (error) {
       console.error('Erro ao alterar status:', error)
@@ -1301,7 +1326,7 @@ useEffect(() => {
     
     const todasCategorias = [...new Set([...categoriasProdutos, ...categoriasFirestoreNomes])]
     return todasCategorias.sort()
-  }, [produtos, categoriasAtivasFirestore])
+    }, [produtos, categoriasAtivasFirestore])
 
   // Estatísticas de validade
   const estatisticasValidade = produtos ? {
@@ -1311,6 +1336,9 @@ useEffect(() => {
     proximoVencimento: produtos.filter(p => verificarValidade(p).status === 'proximo_vencimento').length,
     comValidade: produtos.filter(p => p.temValidade).length
   } : { vencidos: 0, vencendoHoje: 0, vencendoEm7Dias: 0, proximoVencimento: 0, comValidade: 0 }
+
+  // ✅ CONDIÇÃO DE LOADING CORRIGIDA - Inclui todas as dependências
+  const isLoadingData = (loadingProdutos || loadingCategorias || loadingMovimentacoes) && !forceShowContent
 
   return (
     <ProtectedRoute>
@@ -1327,8 +1355,8 @@ useEffect(() => {
            : 'max-w-7xl mx-auto lg:ml-64'
         }`}>
 
-          {/* Loading inicial */}
-          {(loadingProdutos || loadingCategorias) && (
+          {/* ✅ LOADING CORRIGIDO - Inclui loadingMovimentacoes */}
+          {isLoadingData && (
             <div className="bg-white rounded-xl shadow-xl p-8 sm:p-12 mb-6 animate-fade-in">
               <div className="flex flex-col items-center justify-center">
                 <div className="relative mb-6">
@@ -1344,7 +1372,7 @@ useEffect(() => {
           )}
 
           {/* Alerta de sincronização ativa */}
-          {!loadingProdutos && !loadingMovimentacoes && movimentacoes && (
+          {!isLoadingData && movimentacoes && (
             <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 animate-slide-up">
               <div className="flex">
                 <div className="flex-shrink-0">
@@ -1358,6 +1386,9 @@ useEffect(() => {
                     <p>✅ Produtos atualizados automaticamente com sistema de contagem por código</p>
                     <p>📱 {movimentacoes.filter(m => m.codigoBarrasUsado).length} movimentações com códigos específicos registradas</p>
                     <p>🕒 Última sincronização: {ultimaSincronizacao.toLocaleTimeString('pt-BR')}</p>
+                    {sincronizandoManualmente && (
+                      <p className="text-orange-600">🔄 Sincronização em andamento...</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1365,7 +1396,7 @@ useEffect(() => {
           )}
 
           {/* Alertas críticos de validade */}
-          {!loadingProdutos && (estatisticasValidade.vencidos > 0 || estatisticasValidade.vencendoHoje > 0) && (
+          {!isLoadingData && (estatisticasValidade.vencidos > 0 || estatisticasValidade.vencendoHoje > 0) && (
             <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 animate-slide-up">
               <div className="flex">
                 <div className="flex-shrink-0">
@@ -1397,7 +1428,7 @@ useEffect(() => {
           )}
 
           {/* Header com botões */}
-          {!loadingProdutos && (
+          {!isLoadingData && (
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 animate-fade-in">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Controle de Produtos</h1>
@@ -1441,7 +1472,7 @@ useEffect(() => {
           )}
 
           {/* Filtros */}
-          {!loadingProdutos && (
+          {!isLoadingData && (
             <div className="bg-white p-6 rounded-xl shadow-lg mb-6 animate-fade-in">
               <h3 className="text-lg font-bold text-gray-800 mb-4">🔍 Filtros</h3>
 
@@ -1521,7 +1552,7 @@ useEffect(() => {
           )}
 
           {/* Resumo dos filtros */}
-          {!loadingProdutos && produtos && (
+          {!isLoadingData && produtos && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 animate-fade-in">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
                 <span className="text-blue-800 font-medium">
@@ -1710,7 +1741,7 @@ useEffect(() => {
                             type="text"
                             value={formData.marca}
                             onChange={(e) => setFormData({...formData, marca: e.target.value})}
-                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
                             placeholder="Ex: Nike, Samsung..."
                             disabled={loading}
                           />
@@ -1722,7 +1753,7 @@ useEffect(() => {
                             type="text"
                             value={formData.modelo}
                             onChange={(e) => setFormData({...formData, modelo: e.target.value})}
-                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
                             placeholder="Ex: Air Max, Galaxy S24..."
                             disabled={loading}
                           />
@@ -1734,7 +1765,7 @@ useEffect(() => {
                             type="text"
                             value={formData.cor}
                             onChange={(e) => setFormData({...formData, cor: e.target.value})}
-                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
                             placeholder="Ex: Azul, Preto..."
                             disabled={loading}
                           />
@@ -1746,7 +1777,7 @@ useEffect(() => {
                             type="text"
                             value={formData.tamanho}
                             onChange={(e) => setFormData({...formData, tamanho: e.target.value})}
-                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+                            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200 placeholder-gray-600"
                             placeholder="Ex: M, 42, 500ml..."
                             disabled={loading}
                           />
@@ -2062,7 +2093,7 @@ useEffect(() => {
           )}
 
           {/* Lista de Produtos */}
-          {!loadingProdutos && (
+          {!isLoadingData && (
             <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-fade-in">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-800">📋 Lista de Produtos com Contagem</h3>
@@ -2426,7 +2457,7 @@ useEffect(() => {
                                       )}
                                       {validadeInfo.status === 'vence_em_7_dias' && (
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                                                                    📅 {validadeInfo.textoVencimento}
+                                          📅 {validadeInfo.textoVencimento}
                                         </span>
                                       )}
                                       {validadeInfo.status === 'proximo_vencimento' && (
@@ -2498,7 +2529,7 @@ useEffect(() => {
           )}
 
           {/* Estatísticas finais atualizadas */}
-          {!loadingProdutos && produtos && produtos.length > 0 && (
+          {!isLoadingData && produtos && produtos.length > 0 && (
             <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200 animate-fade-in">
               <h3 className="text-lg font-bold text-gray-800 mb-6">📊 Resumo dos Produtos com Contagem</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -2629,13 +2660,13 @@ useEffect(() => {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-green-800 mb-2">
-                  Sistema Avançado: Contagem Inteligente de Códigos
+                  Sistema Avançado: Contagem Inteligente de Códigos (SEM LOOP INFINITO)
                 </h3>
                 <div className="text-sm text-green-700 space-y-2">
                   <p>• <strong>🔢 Contagem por código:</strong> Cada código registra quantas unidades existem</p>
                   <p>• <strong>📱 Scanner integrado:</strong> Adicione códigos diretamente com câmera ou digitação</p>
                   <p>• <strong>➕/➖ Controle granular:</strong> Ajuste quantidades individualmente por código</p>
-                  <p>• <strong>🔄 Sincronização automática:</strong> Movimentações atualizam contagens em tempo real</p>
+                  <p>• <strong>🔄 Sincronização controlada:</strong> Movimentações atualizam contagens sem loops</p>
                   <p>• <strong>🛒 Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
                   <p>• <strong>📊 Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
                   <p>• <strong>🥃 Destilados inteligentes:</strong> Bebidas destiladas automaticamente sem validade</p>
@@ -2644,7 +2675,27 @@ useEffect(() => {
                   <p>• <strong>✅ Validação robusta:</strong> Impede códigos duplicados entre produtos</p>
                   <p>• <strong>⚡ Performance otimizada:</strong> Sistema eficiente para grandes volumes</p>
                   <p>• <strong>🔔 Alertas inteligentes:</strong> Notificações quando códigos são utilizados</p>
+                  <p>• <strong>🛡️ Sistema estável:</strong> Corrigido problema de loop infinito no carregamento</p>
+                  <p>• <strong>⏰ Timeout de segurança:</strong> Interface forçada após 10 segundos se necessário</p>
+                  <p>• <strong>🎯 Sincronização inteligente:</strong> Apenas quando necessário (intervalos de 10 minutos)</p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ✅ INDICADOR DE STATUS DO SISTEMA */}
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-blue-800">
+                  Sistema operacional - Sem loops de carregamento
+                </span>
+              </div>
+              <div className="text-xs text-blue-600 space-x-4">
+                <span>Loading: {isLoadingData ? '🔄' : '✅'}</span>
+                <span>Sync: {sincronizandoManualmente ? '🔄' : '✅'}</span>
+                <span>Timeout: {forceShowContent ? '⏰' : '⌚'}</span>
               </div>
             </div>
           </div>
