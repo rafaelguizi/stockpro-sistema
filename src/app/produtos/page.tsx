@@ -293,7 +293,6 @@ function GerenciadorCodigosBarras({
       {/* Dicas atualizadas */}
       <div className="text-xs text-gray-500 space-y-1">
         <p>💡 <strong>Sistema de contagem:</strong> Cada código registra quantas unidades existem</p>
-        <p>🎯 <strong>Exemplo:</strong> 4 cervejas Skol com mesmo código = 1 código com quantidade 4</p>
         <p>🔄 <strong>Vendas:</strong> Cada venda remove apenas 1 unidade do código específico</p>
         <p>📋 <strong>Gestão:</strong> Use ➕/➖ para ajustar quantidades ou 📋 para adicionar mais</p>
         {produtoId && (
@@ -701,20 +700,26 @@ export default function Produtos() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroValidade, setFiltroValidade] = useState('')
 
-  // Sincronização automática com movimentações
-  useEffect(() => {
-    if (movimentacoes && produtos) {
-      const agora = new Date()
-      const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
-      const diferencaMinutos = diferencaMs / (1000 * 60)
+  // ✅ VERSÃO CORRIGIDA - SEM LOOP INFINITO
+useEffect(() => {
+  if (movimentacoes && produtos && produtos.length > 0) {
+    const agora = new Date()
+    const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
+    const diferencaMinutos = diferencaMs / (1000 * 60)
 
-      if (diferencaMinutos > 1) {
-        console.log('🔄 Sincronizando dados de produtos com movimentações...')
+    // Só sincroniza se passou mais de 5 minutos (evita spam)
+    if (diferencaMinutos > 5) {
+      console.log('🔄 Sincronização programada (5+ minutos desde a última)')
+      
+      // 🆕 USE UM TIMEOUT PARA EVITAR LOOP
+      setTimeout(() => {
         refetchProdutos()
-        setUltimaSincronizacao(agora)
-      }
+      }, 1000)
+      
+      setUltimaSincronizacao(agora)
     }
-  }, [movimentacoes, produtos, ultimaSincronizacao, refetchProdutos])
+  }
+}, [movimentacoes]) // ✅ REMOVIDO: produtos, ultimaSincronizacao, refetchProdutos
 
   // Alertas de códigos removidos
   useEffect(() => {
