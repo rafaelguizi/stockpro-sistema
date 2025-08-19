@@ -22,12 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
+// 🆕 INTERFACE PRODUTO ATUALIZADA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
-  categoriaId?: string // 🆕 INTEGRAÇÃO COM CATEGORIAS
+  categoriaId?: string
+  codigosBarras: string[]      // 🆕 Array de códigos
+  temCodigoBarras: boolean     // 🆕 Controle se usa código
+  isDestilado: boolean         // 🆕 Bebida sem validade
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -41,6 +45,7 @@ interface Produto {
   diasAlerta?: number
 }
 
+// 🆕 INTERFACE MOVIMENTACAO ATUALIZADA
 interface Movimentacao {
   id: string
   produto: string
@@ -54,24 +59,32 @@ interface Movimentacao {
   hora: string
   observacao: string
   userId: string
+  codigoBarrasUsado?: string   // 🆕 Código específico usado
+  clienteId?: string           // 🆕 Dados do cliente
+  clienteNome?: string
+  clienteCpfCnpj?: string
+  formaPagamento?: string
+  valorPago?: number
+  troco?: number
 }
 
-// 🆕 COMPONENTE DE BUSCA INTELIGENTE ATUALIZADO COM CATEGORIAS
+// 🆕 COMPONENTE DE BUSCA INTELIGENTE ATUALIZADO COM MÚLTIPLOS CÓDIGOS
 interface ProdutoSelectorProps {
   produtos: Produto[]
   categorias?: CategoriaFirestore[]
-  onSelect: (produto: Produto | null) => void
+  onSelect: (produto: Produto | null, codigoEspecifico?: string) => void
   produtoSelecionado?: Produto | null
+  codigoSelecionado?: string
   disabled?: boolean
 }
 
-function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, disabled }: ProdutoSelectorProps) {
+function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, codigoSelecionado, disabled }: ProdutoSelectorProps) {
   const [busca, setBusca] = useState('')
   const [mostrarLista, setMostrarLista] = useState(false)
   const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>(produtos)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 🆕 FUNÇÃO PARA OBTER DADOS DA CATEGORIA
+  // Função para obter dados da categoria
   const obterDadosCategoria = useCallback((produto: Produto) => {
     if (produto.categoriaId && categorias) {
       const categoria = categorias.find(cat => cat.id === produto.categoriaId)
@@ -105,9 +118,12 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
     const filtrados = produtos.filter(produto =>
       produto.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
       produto.codigo.toLowerCase().includes(termoBusca.toLowerCase()) ||
-      produto.categoria?.toLowerCase().includes(termoBusca.toLowerCase())
+      produto.categoria?.toLowerCase().includes(termoBusca.toLowerCase()) ||
+      // 🆕 BUSCAR EM CÓDIGOS DE BARRAS
+      produto.codigosBarras?.some(codigo => 
+        codigo.toLowerCase().includes(termoBusca.toLowerCase())
+      )
     ).sort((a, b) => {
-      // Priorizar produtos com nome que começam com o termo de busca
       const aStartsWith = a.nome.toLowerCase().startsWith(termoBusca.toLowerCase())
       const bStartsWith = b.nome.toLowerCase().startsWith(termoBusca.toLowerCase())
       
@@ -125,14 +141,13 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
     filtrarProdutos(valor)
     setMostrarLista(true)
     
-    // Se limpar a busca, limpar seleção
     if (!valor.trim()) {
       onSelect(null)
     }
   }
 
-  const handleSelect = (produto: Produto) => {
-    onSelect(produto)
+  const handleSelect = (produto: Produto, codigoEspecifico?: string) => {
+    onSelect(produto, codigoEspecifico)
     setBusca(produto.nome)
     setMostrarLista(false)
   }
@@ -144,7 +159,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
     setProdutosFiltrados(produtos)
   }
 
-  // Auto-focus e atalhos de teclado
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -181,7 +195,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
 
   return (
     <div className="relative">
-      {/* Campo de busca */}
       <div className="relative">
         <input
           ref={inputRef}
@@ -193,7 +206,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
             filtrarProdutos(busca)
           }}
           className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm pr-10 transition-all duration-200"
-          placeholder="🔍 Busque por nome, código ou categoria..."
+          placeholder="🔍 Busque por nome, código ou código de barras..."
           disabled={disabled}
           autoComplete="off"
         />
@@ -209,7 +222,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
         )}
       </div>
 
-      {/* Lista de produtos (ATUALIZADA COM VISUAL DE CATEGORIAS) */}
+      {/* 🆕 LISTA DE PRODUTOS COM CÓDIGOS MÚLTIPLOS */}
       {mostrarLista && !disabled && (
         <div className="absolute z-20 w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-fade-in">
           {produtosFiltrados.length === 0 ? (
@@ -218,7 +231,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
                 <>
                   <div className="text-2xl mb-2">😔</div>
                   <div>Nenhum produto encontrado para "<strong>{busca}</strong>"</div>
-                  <div className="text-xs text-gray-400 mt-1">Tente buscar por nome, código ou categoria</div>
+                  <div className="text-xs text-gray-400 mt-1">Tente buscar por nome, código ou código de barras</div>
                 </>
               ) : (
                 <>
@@ -231,102 +244,145 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
             <>
               {produtosFiltrados.map((produto, index) => {
                 const validadeInfo = verificarValidade(produto)
-                const dadosCategoria = obterDadosCategoria(produto) // 🆕 OBTER DADOS DA CATEGORIA
+                const dadosCategoria = obterDadosCategoria(produto)
                 
                 return (
-                  <button
-                    key={produto.id}
-                    type="button"
-                    onClick={() => handleSelect(produto)}
-                    className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 focus:bg-blue-100 focus:outline-none transition-colors"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center flex-1">
-                        {/* 🆕 ÍCONE DA CATEGORIA */}
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-white mr-3 flex-shrink-0"
-                          style={{ backgroundColor: dadosCategoria.cor }}
-                        >
-                          <span className="text-sm">{dadosCategoria.icone}</span>
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 truncate">{produto.nome}</div>
-                          <div className="text-sm text-gray-500 flex items-center space-x-2 flex-wrap">
-                            <span>#{produto.codigo}</span>
-                            <span>•</span>
-                            <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: dadosCategoria.cor + '20', color: dadosCategoria.cor }}>
-                              {dadosCategoria.nome}
-                            </span>
-                            <span>•</span>
-                            <span>Est: {produto.estoque}</span>
-                            <span>•</span>
-                            <span>R$ {produto.valorVenda.toFixed(2)}</span>
+                  <div key={produto.id} className="border-b border-gray-100 last:border-b-0">
+                    {/* Produto principal */}
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(produto)}
+                      className="w-full px-4 py-3 text-left hover:bg-blue-50 focus:bg-blue-100 focus:outline-none transition-colors"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center flex-1">
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-white mr-3 flex-shrink-0"
+                            style={{ backgroundColor: dadosCategoria.cor }}
+                          >
+                            <span className="text-sm">{dadosCategoria.icone}</span>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{produto.nome}</div>
+                            <div className="text-sm text-gray-500 flex items-center space-x-2 flex-wrap">
+                              <span>#{produto.codigo}</span>
+                              <span>•</span>
+                              <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: dadosCategoria.cor + '20', color: dadosCategoria.cor }}>
+                                {dadosCategoria.nome}
+                              </span>
+                              <span>•</span>
+                              <span>Est: {produto.estoque}</span>
+                              <span>•</span>
+                              <span>R$ {produto.valorVenda.toFixed(2)}</span>
+                            </div>
+                            
+                            {/* 🆕 MOSTRAR CÓDIGOS DE BARRAS DISPONÍVEIS */}
+                            {produto.temCodigoBarras && produto.codigosBarras.length > 0 && (
+                              <div className="text-xs text-blue-600 mt-1">
+                                📱 {produto.codigosBarras.length} código(s) de barras
+                              </div>
+                            )}
+                            {!produto.temCodigoBarras && (
+                              <div className="text-xs text-yellow-600 mt-1">
+                                📝 Sem código de barras
+                              </div>
+                            )}
                           </div>
                         </div>
+                        
+                        <div className="flex flex-col items-end space-y-1 ml-2">
+                          {produto.estoque <= 0 && (
+                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                              🚫 Sem estoque
+                            </span>
+                          )}
+                          {produto.estoque > 0 && produto.estoque <= produto.estoqueMinimo && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                              ⚠️ Estoque baixo
+                            </span>
+                          )}
+                          {produto.isDestilado && (
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                              🥃 Destilado
+                            </span>
+                          )}
+                          {validadeInfo && (
+                            <>
+                              {validadeInfo.status === 'vencido' && (
+                                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                                  🚨 Vencido
+                                </span>
+                              )}
+                              {validadeInfo.status === 'vence_hoje' && (
+                                <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                                  ⏰ Vence hoje
+                                </span>
+                              )}
+                              {validadeInfo.status === 'vence_em_7_dias' && (
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                                  📅 {validadeInfo.dias} dias
+                                </span>
+                              )}
+                              {validadeInfo.status === 'proximo_vencimento' && (
+                                <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                                  ⚠️ {validadeInfo.dias} dias
+                                </span>
+                              )}
+                              {validadeInfo.status === 'valido' && (
+                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                  ✅ Válido
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                      
-                      <div className="flex flex-col items-end space-y-1 ml-2">
-                        {produto.estoque <= 0 && (
-                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                            🚫 Sem estoque
-                          </span>
-                        )}
-                        {produto.estoque > 0 && produto.estoque <= produto.estoqueMinimo && (
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                            ⚠️ Estoque baixo
-                          </span>
-                        )}
-                        {validadeInfo && (
-                          <>
-                            {validadeInfo.status === 'vencido' && (
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                                🚨 Vencido
-                              </span>
-                            )}
-                            {validadeInfo.status === 'vence_hoje' && (
-                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                                ⏰ Vence hoje
-                              </span>
-                            )}
-                            {validadeInfo.status === 'vence_em_7_dias' && (
-                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                                📅 {validadeInfo.dias} dias
-                              </span>
-                            )}
-                            {validadeInfo.status === 'proximo_vencimento' && (
-                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
-                                ⚠️ {validadeInfo.dias} dias
-                              </span>
-                            )}
-                            {validadeInfo.status === 'valido' && (
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                                ✅ Válido
-                              </span>
-                            )}
-                          </>
-                        )}
+                    </button>
+
+                    {/* 🆕 CÓDIGOS ESPECÍFICOS PARA SELEÇÃO */}
+                    {produto.temCodigoBarras && produto.codigosBarras.length > 1 && (
+                      <div className="px-4 pb-2 bg-gray-50">
+                        <div className="text-xs text-gray-600 mb-2 font-medium">Selecionar código específico:</div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {produto.codigosBarras.slice(0, 4).map((codigo, index) => (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={() => handleSelect(produto, codigo)}
+                              className="text-left p-2 rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all text-xs"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono text-blue-600">📱 {codigo}</span>
+                                <span className="text-gray-500">Código {index + 1}</span>
+                              </div>
+                            </button>
+                          ))}
+                          {produto.codigosBarras.length > 4 && (
+                            <div className="text-xs text-gray-500 text-center py-1">
+                              +{produto.codigosBarras.length - 4} códigos adicionais
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    )}
+                  </div>
                 )
               })}
               
-              {/* Rodapé com informações */}
               <div className="p-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 text-center">
-                {produtosFiltrados.length} produto(s) encontrado(s) • Use ↑↓ para navegar • ESC para fechar
+                {produtosFiltrados.length} produto(s) • ESC para fechar
               </div>
             </>
           )}
         </div>
       )}
 
-      {/* Produto selecionado (ATUALIZADO COM VISUAL DE CATEGORIA) */}
+      {/* 🆕 PRODUTO SELECIONADO COM CÓDIGO ESPECÍFICO */}
       {produtoSelecionado && !mostrarLista && (
         <div className="mt-3 p-4 bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-lg animate-slide-down">
           <div className="flex justify-between items-start">
             <div className="flex items-start space-x-3 flex-1">
-              {/* 🆕 ÍCONE DA CATEGORIA DO PRODUTO SELECIONADO */}
               <div
                 className="w-12 h-12 rounded-lg flex items-center justify-center text-white flex-shrink-0"
                 style={{ backgroundColor: obterDadosCategoria(produtoSelecionado).cor }}
@@ -345,6 +401,17 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
                       <strong>Categoria:</strong> {obterDadosCategoria(produtoSelecionado).nome}
                     </span>
                   </div>
+                  
+                  {/* 🆕 CÓDIGO ESPECÍFICO SELECIONADO */}
+                  {codigoSelecionado && (
+                    <div className="flex items-center space-x-4 flex-wrap">
+                      <span className="text-blue-800 font-medium">
+                        <strong>Código selecionado:</strong> 
+                        <span className="font-mono bg-blue-100 px-2 py-1 rounded ml-2">📱 {codigoSelecionado}</span>
+                      </span>
+                    </div>
+                  )}
+                  
                   <div className="flex items-center space-x-4 flex-wrap">
                     <span><strong>Estoque atual:</strong> {produtoSelecionado.estoque} unidades</span>
                     <span><strong>Estoque mínimo:</strong> {produtoSelecionado.estoqueMinimo}</span>
@@ -353,9 +420,46 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
                     <span><strong>Preço compra:</strong> R$ {produtoSelecionado.valorCompra.toFixed(2)}</span>
                     <span><strong>Preço venda:</strong> R$ {produtoSelecionado.valorVenda.toFixed(2)}</span>
                   </div>
+
+                  {/* 🆕 INFORMAÇÕES DE CÓDIGOS */}
+                  {produtoSelecionado.temCodigoBarras && produtoSelecionado.codigosBarras.length > 0 && (
+                    <div className="bg-blue-100 p-2 rounded border-l-4 border-blue-400">
+                      <div className="text-xs text-blue-800">
+                        <strong>📱 Códigos de barras ({produtoSelecionado.codigosBarras.length}):</strong>
+                        <div className="mt-1 space-y-1">
+                          {produtoSelecionado.codigosBarras.slice(0, 3).map((codigo, index) => (
+                            <div key={index} className="font-mono text-xs">
+                              • {codigo} {codigo === codigoSelecionado && <span className="text-green-600">(selecionado)</span>}
+                            </div>
+                          ))}
+                          {produtoSelecionado.codigosBarras.length > 3 && (
+                            <div className="text-xs text-blue-600">
+                              +{produtoSelecionado.codigosBarras.length - 3} códigos adicionais
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!produtoSelecionado.temCodigoBarras && (
+                    <div className="bg-yellow-100 p-2 rounded border-l-4 border-yellow-400">
+                      <div className="text-xs text-yellow-800">
+                        <strong>📝 Produto sem código de barras</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {produtoSelecionado.isDestilado && (
+                    <div className="bg-purple-100 p-2 rounded border-l-4 border-purple-400">
+                      <div className="text-xs text-purple-800">
+                        <strong>🥃 Produto destilado - Sem controle de validade</strong>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Validade do produto */}
-                  {produtoSelecionado.temValidade && produtoSelecionado.dataValidade && (
+                  {produtoSelecionado.temValidade && produtoSelecionado.dataValidade && !produtoSelecionado.isDestilado && (
                     <div className="flex items-center space-x-4 flex-wrap">
                       <span><strong>Validade:</strong> {(() => {
                         const [ano, mes, dia] = produtoSelecionado.dataValidade.split('-')
@@ -410,7 +514,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, d
         </div>
       )}
 
-      {/* Overlay para fechar lista */}
       {mostrarLista && (
         <div
           className="fixed inset-0 z-10"
@@ -426,40 +529,33 @@ export default function Movimentacoes() {
   const { user } = useAuth()
   const toast = useToastContext()
 
-  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD)
+  // Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
-  // Escutar mudanças no localStorage para sincronizar
-  const handleStorageChange = () => {
-    const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
-    if (collapsed !== null) {
-      setSidebarCollapsed(JSON.parse(collapsed))
+    const handleStorageChange = () => {
+      const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+      if (collapsed !== null) {
+        setSidebarCollapsed(JSON.parse(collapsed))
+      }
     }
-  }
 
-  // Verificar estado inicial
-  handleStorageChange()
+    handleStorageChange()
+    window.addEventListener('storage', handleStorageChange)
+    const interval = setInterval(handleStorageChange, 100)
 
-  // Escutar mudanças
-  window.addEventListener('storage', handleStorageChange)
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [])
   
-  // Polling para mudanças na mesma aba (workaround)
-  const interval = setInterval(handleStorageChange, 100)
-
-  return () => {
-    window.removeEventListener('storage', handleStorageChange)
-    clearInterval(interval)
-  }
-}, [])
-  
-  // 🆕 HOOK PARA CATEGORIAS FIRESTORE
+  // Hooks do Firestore
   const { 
     data: categorias, 
     loading: loadingCategorias 
   } = useFirestore<CategoriaFirestore>('categorias')
   
-  // Hooks do Firestore
   const { 
     data: produtos, 
     loading: loadingProdutos,
@@ -476,8 +572,9 @@ export default function Movimentacoes() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  // Estados do produto selecionado
+  // 🆕 ESTADOS DO PRODUTO E CÓDIGO SELECIONADO
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
+  const [codigoSelecionado, setCodigoSelecionado] = useState<string>('')
   
   // Estados do formulário
   const [formData, setFormData] = useState({
@@ -493,8 +590,9 @@ export default function Movimentacoes() {
   const [filtroProduto, setFiltroProduto] = useState('')
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
   const [filtroDataFim, setFiltroDataFim] = useState('')
-  // 🆕 NOVO FILTRO POR CATEGORIA
   const [filtroCategoria, setFiltroCategoria] = useState('')
+  // 🆕 NOVO FILTRO POR CÓDIGO DE BARRAS
+  const [filtroCodigoBarras, setFiltroCodigoBarras] = useState('')
   
   // Estados de ordenação
   const [ordenacao, setOrdenacao] = useState<'data_desc' | 'data_asc' | 'produto_asc' | 'valor_desc'>('data_desc')
@@ -504,7 +602,7 @@ export default function Movimentacoes() {
   const [itensSelecionados, setItensSelecionados] = useState<string[]>([])
   const [mostrarFiltrosAvancados, setMostrarFiltrosAvancados] = useState(false)
 
-  // 🆕 FUNÇÃO PARA OBTER DADOS DA CATEGORIA
+  // Função para obter dados da categoria
   const obterDadosCategoria = useCallback((produto: Produto) => {
     if (produto.categoriaId && categorias) {
       const categoria = categorias.find(cat => cat.id === produto.categoriaId)
@@ -528,32 +626,28 @@ export default function Movimentacoes() {
     }
   }, [categorias])
 
-  // 🆕 CATEGORIAS PARA FILTRO
+  // Categorias para filtro
   const categoriasParaFiltro = useMemo(() => {
     if (!categorias) return []
     return categorias.filter(cat => cat.ativo).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [categorias])
 
-  // Definir produtosAtivos ANTES de usar nos useEffects
   const produtosAtivos = produtos ? produtos.filter(p => p.ativo) : []
   const isLoadingData = loadingProdutos || loadingMovimentacoes || loadingCategorias
 
   // Atalhos de teclado
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ctrl+N - Nova movimentação
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
         if (produtosAtivos.length > 0) {
           setShowForm(true)
         }
       }
-      // Ctrl+F - Focar na busca
       if (e.ctrlKey && e.key === 'f') {
         e.preventDefault()
         document.getElementById('busca-movimentacoes')?.focus()
       }
-      // Escape - Fechar modal
       if (e.key === 'Escape' && showForm) {
         resetForm()
       }
@@ -563,6 +657,12 @@ export default function Movimentacoes() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [showForm, produtosAtivos.length])
 
+  // 🆕 FUNÇÃO PARA SELECIONAR PRODUTO E CÓDIGO
+  const handleProdutoSelect = (produto: Produto | null, codigoEspecifico?: string) => {
+    setProdutoSelecionado(produto)
+    setCodigoSelecionado(codigoEspecifico || '')
+  }
+
   const resetForm = () => {
     setFormData({
       tipo: 'entrada',
@@ -570,9 +670,11 @@ export default function Movimentacoes() {
       observacao: ''
     })
     setProdutoSelecionado(null)
+    setCodigoSelecionado('')
     setShowForm(false)
   }
 
+  // 🆕 FUNÇÃO handleSubmit ATUALIZADA
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -583,7 +685,6 @@ export default function Movimentacoes() {
 
     setLoading(true)
     try {
-      // Validações
       if (!produtoSelecionado || !formData.quantidade) {
         toast.error('Campos obrigatórios', 'Selecione um produto e informe a quantidade!')
         return
@@ -601,13 +702,11 @@ export default function Movimentacoes() {
         return
       }
 
-      // Verificar estoque para saídas
       if (formData.tipo === 'saida' && produtoSelecionado.estoque < quantidade) {
         toast.error('Estoque insuficiente', `Estoque atual: ${produtoSelecionado.estoque} unidades`)
         return
       }
 
-      // Calcular novo estoque
       const novoEstoque = formData.tipo === 'entrada' 
         ? produtoSelecionado.estoque + quantidade 
         : produtoSelecionado.estoque - quantidade
@@ -617,10 +716,16 @@ export default function Movimentacoes() {
         return
       }
 
-      // Usar valor padrão do produto (entrada = valor compra, saída = valor venda)
       const valorUnitario = formData.tipo === 'entrada' ? produtoSelecionado.valorCompra : produtoSelecionado.valorVenda
 
-      const novaMovimentacao = {
+      // 🆕 OBSERVAÇÃO COM CÓDIGO ESPECÍFICO
+      let observacao = formData.observacao
+      if (codigoSelecionado && codigoSelecionado !== produtoSelecionado.codigo) {
+        observacao = `${observacao ? observacao + ' - ' : ''}Código usado: ${codigoSelecionado}`.trim()
+      }
+
+      // 🆕 CAMPOS OBRIGATÓRIOS
+      const novaMovimentacaoBase = {
         produto: produtoSelecionado.nome,
         codigo: produtoSelecionado.codigo,
         produtoId: produtoSelecionado.id,
@@ -633,20 +738,33 @@ export default function Movimentacoes() {
           hour: '2-digit', 
           minute: '2-digit' 
         }),
-        observacao: formData.observacao,
+        observacao,
         userId: user.uid
       }
 
-      // Salvar movimentação
-      await addMovimentacao(novaMovimentacao)
+      // 🆕 CAMPOS OPCIONAIS
+      const camposOpcionais: Partial<Movimentacao> = {}
 
-      // Atualizar estoque do produto
+      if (codigoSelecionado && codigoSelecionado.trim() !== '') {
+        camposOpcionais.codigoBarrasUsado = codigoSelecionado
+      }
+
+      // 🆕 COMBINAR E FILTRAR UNDEFINED
+      const novaMovimentacao = { ...novaMovimentacaoBase, ...camposOpcionais }
+      const movimentacaoLimpa = Object.fromEntries(
+        Object.entries(novaMovimentacao).filter(([_, value]) => value !== undefined)
+      ) as Omit<Movimentacao, 'id'>
+
+      console.log('Movimentação a ser salva:', movimentacaoLimpa)
+
+      await addMovimentacao(movimentacaoLimpa)
       await updateProduto(produtoSelecionado.id, { ...produtoSelecionado, estoque: novoEstoque })
 
       const tipoTexto = formData.tipo === 'entrada' ? 'Entrada' : 'Saída'
+      const codigoTexto = codigoSelecionado ? ` (Código: ${codigoSelecionado})` : ''
       toast.success(
         `${tipoTexto} registrada!`, 
-        `${quantidade} unidades de ${produtoSelecionado.nome}`
+        `${quantidade} unidades de ${produtoSelecionado.nome}${codigoTexto}`
       )
 
       resetForm()
@@ -668,7 +786,6 @@ export default function Movimentacoes() {
       const movimentacao = movimentacoes.find(m => m.id === id)
       if (!movimentacao) return
 
-      // Reverter o estoque
       const produto = produtos.find(p => p.id === movimentacao.produtoId)
       if (produto) {
         const estoqueRevertido = movimentacao.tipo === 'entrada' 
@@ -690,7 +807,6 @@ export default function Movimentacoes() {
     }
   }
 
-  // Excluir múltiplas movimentações
   const excluirMovimentacoesSelecionadas = async () => {
     if (itensSelecionados.length === 0) return
     
@@ -710,18 +826,23 @@ export default function Movimentacoes() {
     }
   }
 
-  // 🆕 FILTRAR MOVIMENTAÇÕES ATUALIZADO COM CATEGORIA
+  // 🆕 FILTRAR MOVIMENTAÇÕES ATUALIZADO
   const movimentacoesFiltradas = movimentacoes ? movimentacoes.filter(mov => {
-    // Busca básica
     const matchBusca = mov.produto.toLowerCase().includes(busca.toLowerCase()) ||
                       mov.codigo.toLowerCase().includes(busca.toLowerCase()) ||
-                      mov.observacao.toLowerCase().includes(busca.toLowerCase())
+                      mov.observacao.toLowerCase().includes(busca.toLowerCase()) ||
+                      // 🆕 BUSCAR POR CÓDIGO DE BARRAS USADO
+                      (mov.codigoBarrasUsado && mov.codigoBarrasUsado.toLowerCase().includes(busca.toLowerCase()))
     
     const matchTipo = filtroTipo === '' || mov.tipo === filtroTipo
     const matchData = filtroData === '' || mov.data === filtroData
     const matchProduto = filtroProduto === '' || mov.codigo === filtroProduto
     
-    // 🆕 FILTRO POR CATEGORIA
+    // 🆕 FILTRO POR CÓDIGO DE BARRAS
+    const matchCodigoBarras = filtroCodigoBarras === '' || 
+                             (mov.codigoBarrasUsado && mov.codigoBarrasUsado.includes(filtroCodigoBarras))
+    
+    // Filtro por categoria
     let matchCategoria = true
     if (filtroCategoria && produtos) {
       const produto = produtos.find(p => p.id === mov.produtoId)
@@ -753,7 +874,7 @@ export default function Movimentacoes() {
       }
     }
     
-    return matchBusca && matchTipo && matchData && matchProduto && matchCategoria && matchPeriodo
+    return matchBusca && matchTipo && matchData && matchProduto && matchCategoria && matchPeriodo && matchCodigoBarras
   }).sort((a, b) => {
     switch (ordenacao) {
       case 'data_desc':
@@ -769,11 +890,10 @@ export default function Movimentacoes() {
     }
   }) : []
 
-  // Obter datas únicas
   const datasUnicas = movimentacoes ? 
     [...new Set(movimentacoes.map(m => m.data))].sort().reverse() : []
 
-  // Exportar dados
+  // 🆕 EXPORTAR DADOS ATUALIZADO
   const exportarDados = () => {
     if (movimentacoesFiltradas.length === 0) {
       toast.warning('Nenhum dado', 'Não há movimentações para exportar')
@@ -781,12 +901,13 @@ export default function Movimentacoes() {
     }
 
     const csv = [
-      'Data,Hora,Produto,Código,Categoria,Tipo,Quantidade,Valor Unitário,Valor Total,Observação',
+      'Data,Hora,Produto,Código,Categoria,Tipo,Quantidade,Valor Unitário,Valor Total,Código de Barras Usado,Observação',
       ...movimentacoesFiltradas.map(mov => {
         const produto = produtos?.find(p => p.id === mov.produtoId)
         const categoria = produto ? obterDadosCategoria(produto).nome : 'N/A'
+        const codigoBarrasUsado = mov.codigoBarrasUsado || 'N/A'
         
-        return `${mov.data},${mov.hora},${mov.produto},${mov.codigo},${categoria},${mov.tipo},${mov.quantidade},${mov.valorUnitario.toFixed(2)},${mov.valorTotal.toFixed(2)},"${mov.observacao}"`
+        return `${mov.data},${mov.hora},${mov.produto},${mov.codigo},${categoria},${mov.tipo},${mov.quantidade},${mov.valorUnitario.toFixed(2)},${mov.valorTotal.toFixed(2)},${codigoBarrasUsado},"${mov.observacao}"`
       })
     ].join('\n')
 
@@ -796,10 +917,9 @@ export default function Movimentacoes() {
     link.download = `movimentacoes_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`
     link.click()
 
-    toast.success('Dados exportados!', 'Arquivo CSV baixado com sucesso')
+    toast.success('Dados exportados!', 'Arquivo CSV baixado com múltiplos códigos')
   }
 
-  // 🆕 ESTATÍSTICAS POR CATEGORIA
   const estatisticasCategorias = useMemo(() => {
     if (!movimentacoes || !produtos || !categorias) return []
 
@@ -875,10 +995,10 @@ export default function Movimentacoes() {
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
               <div>
                 <h1 className={`text-2xl sm:text-3xl font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                  📋 Controle de Movimentações
+                  📋 Controle de Movimentações + Códigos
                 </h1>
                 <p className={`text-sm mt-1 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Ctrl+N para nova movimentação • Ctrl+F para buscar
+                  Rastreamento completo com múltiplos códigos de barras
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
@@ -931,7 +1051,7 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 FILTROS ATUALIZADOS COM CATEGORIA */}
+          {/* 🆕 FILTROS ATUALIZADOS */}
           {!isLoadingData && produtosAtivos.length > 0 && (
             <div className={`p-6 rounded-xl shadow-lg mb-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
               <div className="flex justify-between items-center mb-4">
@@ -950,7 +1070,7 @@ export default function Movimentacoes() {
                   <input
                     id="busca-movimentacoes"
                     type="text"
-                    placeholder="Produto, código ou observação..."
+                    placeholder="Produto, código ou código de barras..."
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
                     className={`w-full border-2 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm text-sm transition-all duration-200 ${
@@ -961,7 +1081,6 @@ export default function Movimentacoes() {
                   />
                 </div>
 
-                {/* 🆕 FILTRO POR CATEGORIA */}
                 <div>
                   <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-800'}`}>Categoria</label>
                   <select
@@ -1047,7 +1166,8 @@ export default function Movimentacoes() {
                       setFiltroProduto('')
                       setFiltroDataInicio('')
                       setFiltroDataFim('')
-                      setFiltroCategoria('') // 🆕 LIMPAR FILTRO DE CATEGORIA
+                      setFiltroCategoria('')
+                      setFiltroCodigoBarras('') // 🆕 LIMPAR NOVO FILTRO
                     }}
                     variant="secondary"
                     size="md"
@@ -1058,9 +1178,9 @@ export default function Movimentacoes() {
                 </div>
               </div>
 
-              {/* Filtros avançados */}
+              {/* 🆕 FILTROS AVANÇADOS ATUALIZADOS */}
               {mostrarFiltrosAvancados && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-gray-200 animate-slide-down">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-4 border-t border-gray-200 animate-slide-down">
                   <div>
                     <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-800'}`}>Data Início</label>
                     <input
@@ -1087,6 +1207,23 @@ export default function Movimentacoes() {
                       }`}
                     />
                   </div>
+                  
+                  {/* 🆕 FILTRO POR CÓDIGO DE BARRAS */}
+                  <div>
+                    <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-800'}`}>Código de Barras</label>
+                    <input
+                      type="text"
+                      value={filtroCodigoBarras}
+                      onChange={(e) => setFiltroCodigoBarras(e.target.value)}
+                      placeholder="Digite o código de barras..."
+                      className={`w-full border-2 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm text-sm transition-all duration-200 ${
+                        modoNoturno 
+                          ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-400' 
+                          : 'border-gray-400 bg-white text-gray-900 placeholder-gray-600'
+                      }`}
+                    />
+                  </div>
+                  
                   <div>
                     <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-800'}`}>Ordenar por</label>
                     <select
@@ -1115,7 +1252,7 @@ export default function Movimentacoes() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
                 <span className={`font-medium ${modoNoturno ? 'text-blue-200' : 'text-blue-800'}`}>
                   📊 {movimentacoesFiltradas.length} de {movimentacoes.length} movimentações
-                  {(busca || filtroTipo || filtroData || filtroProduto || filtroDataInicio || filtroDataFim || filtroCategoria) && (
+                  {(busca || filtroTipo || filtroData || filtroProduto || filtroDataInicio || filtroDataFim || filtroCategoria || filtroCodigoBarras) && (
                     <span className={`ml-2 text-xs ${modoNoturno ? 'text-blue-300' : 'text-blue-600'}`}>🔍 Filtros ativos</span>
                   )}
                 </span>
@@ -1145,13 +1282,13 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* Formulário (ATUALIZADO COM CATEGORIAS NO PRODUTO SELECTOR) */}
+          {/* 🆕 FORMULÁRIO ATUALIZADO */}
           {showForm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className={`rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                 <div className={`flex justify-between items-center p-6 border-b ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
                   <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                    ➕ Nova Movimentação
+                    ➕ Nova Movimentação com Códigos
                   </h3>
                   <button
                     onClick={resetForm}
@@ -1166,16 +1303,17 @@ export default function Movimentacoes() {
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
                   
-                  {/* 🆕 BUSCA INTELIGENTE DE PRODUTOS COM CATEGORIAS */}
+                  {/* 🆕 BUSCA INTELIGENTE ATUALIZADA */}
                   <div>
                     <label className={`block text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-800'}`}>
                       Produto *
                     </label>
                     <ProdutoSelector
                       produtos={produtosAtivos}
-                      categorias={categorias || undefined}  // 🆕 PASSAR CATEGORIAS
-                      onSelect={setProdutoSelecionado}
+                      categorias={categorias || undefined}
+                      onSelect={handleProdutoSelect}
                       produtoSelecionado={produtoSelecionado}
+                      codigoSelecionado={codigoSelecionado}
                       disabled={loading}
                     />
                     {produtosAtivos.length === 0 && (
@@ -1240,7 +1378,6 @@ export default function Movimentacoes() {
                       disabled={loading}
                     />
                     
-                    {/* Alertas de estoque */}
                     {produtoSelecionado && formData.tipo === 'saida' && formData.quantidade && (
                       <div className="mt-2">
                         {parseInt(formData.quantidade) > produtoSelecionado.estoque ? (
@@ -1274,7 +1411,7 @@ export default function Movimentacoes() {
                     />
                   </div>
 
-                  {/* Resumo da movimentação */}
+                  {/* 🆕 RESUMO DA MOVIMENTAÇÃO ATUALIZADO */}
                   {produtoSelecionado && formData.quantidade && (
                     <div className="bg-gradient-to-r from-green-100 via-blue-100 to-purple-100 p-5 rounded-lg border-4 border-green-500 shadow-lg animate-fade-in">
                       <h4 className="font-bold text-gray-900 mb-3 text-lg flex items-center">
@@ -1300,6 +1437,15 @@ export default function Movimentacoes() {
                                 <span className="font-bold text-gray-900">{produtoSelecionado.nome}</span>
                               </div>
                             </div>
+                            
+                            {/* 🆕 CÓDIGO ESPECÍFICO NO RESUMO */}
+                            {codigoSelecionado && (
+                              <div className="flex justify-between items-center p-2 bg-blue-50 bg-opacity-70 rounded-lg border border-blue-200">
+                                <span className="text-blue-800 font-medium">Código usado:</span>
+                                <span className="font-mono text-blue-600 bg-blue-100 px-2 py-1 rounded">📱 {codigoSelecionado}</span>
+                              </div>
+                            )}
+                            
                             <div className="flex justify-between items-center p-2 bg-white bg-opacity-70 rounded-lg">
                               <span className="text-gray-800 font-medium">Categoria:</span>
                               <span className="text-xs px-2 py-1 rounded-full font-medium"
@@ -1314,7 +1460,7 @@ export default function Movimentacoes() {
                                   ? 'bg-green-200 text-green-800' 
                                   : 'bg-red-200 text-red-800'
                               }`}>
-                                {formData.tipo === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                                {formData.tipo === 'entrada' ? '�� Entrada' : '�� Saída'}
                               </span>
                             </div>
                             <div className="flex justify-between items-center p-2 bg-white bg-opacity-70 rounded-lg">
@@ -1332,6 +1478,7 @@ export default function Movimentacoes() {
                             <div className="bg-yellow-100 border-l-4 border-yellow-500 p-3 rounded-r-lg">
                               <p className="text-sm text-yellow-800 font-medium">
                                 💡 <strong>Valor automático:</strong> {formData.tipo === 'entrada' ? 'Preço de compra' : 'Preço de venda'} do produto
+                                {codigoSelecionado && <span className="block mt-1">📱 Código específico será registrado na movimentação</span>}
                               </p>
                             </div>
                           </div>
@@ -1368,11 +1515,11 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 LISTA DE MOVIMENTAÇÕES ATUALIZADA COM VISUAL DE CATEGORIAS */}
+          {/* 🆕 LISTA DE MOVIMENTAÇÕES ATUALIZADA */}
           {!isLoadingData && (
             <div className={`rounded-xl shadow-lg overflow-hidden transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
               <div className={`px-6 py-4 border-b flex justify-between items-center ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className={`text-lg font-semibold ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📋 Histórico de Movimentações</h3>
+                <h3 className={`text-lg font-semibold ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📋 Histórico com Códigos Específicos</h3>
                 {movimentacoesFiltradas.length > 0 && (
                   <div className="flex items-center space-x-2">
                     <input
@@ -1417,7 +1564,7 @@ export default function Movimentacoes() {
                 </div>
               ) : (
                 <>
-                  {/* Versão Mobile - Cards (ATUALIZADA COM CATEGORIAS) */}
+                  {/* Versão Mobile - Cards */}
                   <div className="block sm:hidden">
                     <div className={`divide-y ${modoNoturno ? 'divide-gray-700' : 'divide-gray-200'}`}>
                       {movimentacoesFiltradas.map((mov) => {
@@ -1441,7 +1588,6 @@ export default function Movimentacoes() {
                                   className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mt-1"
                                 />
                                 
-                                {/* 🆕 ÍCONE DA CATEGORIA */}
                                 <div
                                   className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
                                   style={{ backgroundColor: dadosCategoria.cor }}
@@ -1465,6 +1611,17 @@ export default function Movimentacoes() {
                                   
                                   <div className={`space-y-1 text-xs ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
                                     <p><span className="font-medium">Código:</span> #{mov.codigo}</p>
+                                    
+                                    {/* 🆕 CÓDIGO DE BARRAS USADO */}
+                                    {mov.codigoBarrasUsado && (
+                                      <p className="flex items-center">
+                                        <span className="font-medium mr-2">Código usado:</span>
+                                        <span className="font-mono text-blue-600 bg-blue-100 px-1 py-0.5 rounded text-xs">
+                                          📱 {mov.codigoBarrasUsado}
+                                        </span>
+                                      </p>
+                                    )}
+                                    
                                     <p className="flex items-center">
                                       <span className="font-medium mr-2">Categoria:</span>
                                       <span className="text-xs px-2 py-1 rounded-full"
@@ -1482,7 +1639,6 @@ export default function Movimentacoes() {
                                 </div>
                               </div>
 
-                              {/* Ação Mobile */}
                               <div className="ml-4">
                                 <LoadingButton
                                   onClick={() => excluirMovimentacao(mov.id)}
@@ -1491,7 +1647,7 @@ export default function Movimentacoes() {
                                   size="sm"
                                   className="text-xs px-2 py-1"
                                 >
-                                  🗑️
+                                  ��️
                                 </LoadingButton>
                               </div>
                             </div>
@@ -1501,7 +1657,7 @@ export default function Movimentacoes() {
                     </div>
                   </div>
 
-                  {/* Versão Desktop - Tabela (ATUALIZADA COM CATEGORIAS) */}
+                  {/* 🆕 VERSÃO DESKTOP ATUALIZADA COM COLUNA DE CÓDIGO */}
                   <div className="hidden sm:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className={modoNoturno ? 'bg-gray-700' : 'bg-gray-50'}>
@@ -1528,6 +1684,9 @@ export default function Movimentacoes() {
                           </th>
                           <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
                             Categoria
+                          </th>
+                          <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
+                            Código Usado
                           </th>
                           <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
                             Tipo
@@ -1575,7 +1734,6 @@ export default function Movimentacoes() {
                                 <div className={`text-sm font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>{mov.produto}</div>
                                 <div className={`text-sm ${modoNoturno ? 'text-gray-400' : 'text-gray-500'}`}>#{mov.codigo}</div>
                               </td>
-                              {/* 🆕 COLUNA DA CATEGORIA */}
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center">
                                   <div
@@ -1589,6 +1747,20 @@ export default function Movimentacoes() {
                                   </div>
                                 </div>
                               </td>
+                              
+                              {/* �� COLUNA CÓDIGO DE BARRAS USADO */}
+                              <td className={`px-6 py-4 whitespace-nowrap text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-900'}`}>
+                                {mov.codigoBarrasUsado ? (
+                                  <div className="flex items-center">
+                                    <span className="font-mono text-blue-600 bg-blue-100 px-2 py-1 rounded text-xs">
+                                      📱 {mov.codigoBarrasUsado}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">Código principal</span>
+                                )}
+                              </td>
+                              
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   mov.tipo === 'entrada' 
@@ -1638,7 +1810,6 @@ export default function Movimentacoes() {
             }`}>
               <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📊 Resumo das Movimentações</h3>
               
-              {/* Cards de estatísticas */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 <div className={`text-center p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                   <div className="text-2xl font-bold text-green-600">
@@ -1669,10 +1840,33 @@ export default function Movimentacoes() {
                 </div>
               </div>
 
-              {/* Informações adicionais */}
+              {/* 🆕 ESTATÍSTICA DE CÓDIGOS MÚLTIPLOS */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className={`text-center p-4 rounded-lg shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div className="text-xl font-bold text-indigo-600">
+                    {movimentacoes.filter(m => m.codigoBarrasUsado).length}
+                  </div>
+                  <div className="text-indigo-600 text-sm font-medium">📱 Com Código Específico</div>
+                </div>
+
+                <div className={`text-center p-4 rounded-lg shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div className="text-xl font-bold text-teal-600">
+                    {movimentacoes.filter(m => !m.codigoBarrasUsado).length}
+                  </div>
+                  <div className="text-teal-600 text-sm font-medium">📝 Código Principal</div>
+                </div>
+
+                <div className={`text-center p-4 rounded-lg shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div className="text-xl font-bold text-pink-600">
+                    {[...new Set(movimentacoes.filter(m => m.codigoBarrasUsado).map(m => m.codigoBarrasUsado))].length}
+                  </div>
+                  <div className="text-pink-600 text-sm font-medium">🔢 Códigos Únicos</div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={`p-4 rounded-lg shadow ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
-                  <h4 className={`font-bold mb-2 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>�� Produto Mais Movimentado</h4>
+                  <h4 className={`font-bold mb-2 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>🏆 Produto Mais Movimentado</h4>
                   {(() => {
                     const produtosMais = movimentacoes.reduce((acc, mov) => {
                       acc[mov.produto] = (acc[mov.produto] || 0) + mov.quantidade
@@ -1707,13 +1901,20 @@ export default function Movimentacoes() {
                         <div className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
                           {ultimaMovimentacao.data} às {ultimaMovimentacao.hora}
                         </div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                          ultimaMovimentacao.tipo === 'entrada' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {ultimaMovimentacao.tipo === 'entrada' ? '�� Entrada' : '📤 Saída'}
-                        </span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            ultimaMovimentacao.tipo === 'entrada' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {ultimaMovimentacao.tipo === 'entrada' ? '📥 Entrada' : '📤 Saída'}
+                          </span>
+                          {ultimaMovimentacao.codigoBarrasUsado && (
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                              📱 Código específico
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className={`text-sm ${modoNoturno ? 'text-gray-400' : 'text-gray-500'}`}>Nenhuma movimentação encontrada</div>
@@ -1724,29 +1925,30 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES ATUALIZADAS */}
+          {/* 🆕 INFORMAÇÕES FINAIS ATUALIZADAS */}
           {!isLoadingData && (
             <div className={`mt-8 border rounded-xl p-4 transition-colors duration-300 ${
               modoNoturno ? 'bg-green-900 border-green-700' : 'bg-green-50 border-green-200'
             }`}>
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <div className="text-2xl">📋</div>
+                  <div className="text-2xl">🚀</div>
                 </div>
                 <div className="ml-3">
                   <h3 className={`text-sm font-medium ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
-                    Sistema de Movimentações com Categorias Visuais
+                    Sistema de Movimentações com Múltiplos Códigos de Barras
                   </h3>
                   <div className={`mt-2 text-sm space-y-1 ${modoNoturno ? 'text-green-300' : 'text-green-700'}`}>
-                    <p>• <strong>📂 Filtros por categoria:</strong> Análise segmentada de movimentações</p>
-                    <p>• <strong>🎨 Visual categorizado:</strong> Ícones e cores para fácil identificação</p>
-                    <p>• <strong>🔍 Busca inteligente:</strong> Produto selector com categorias visuais</p>
-                    <p>• <strong>📥 Exportação melhorada:</strong> CSV com dados de categoria</p>
-                    <p>• <strong>🔄 Controle automático:</strong> Atualização de estoque em tempo real</p>
-                    <p>• <strong>💰 Valores automáticos:</strong> Entrada=compra, Saída=venda</p>
+                    <p>• <strong>🏷️ Rastreamento granular:</strong> Registra qual código específico foi usado em cada movimentação</p>
+                    <p>• <strong>🔍 Busca inteligente:</strong> Encontre movimentações por código de barras específico</p>
+                    <p>• <strong>📂 Filtros avançados:</strong> Filtre por categoria, período e código de barras</p>
+                    <p>• <strong>📊 Estatísticas detalhadas:</strong> Análise de códigos únicos e específicos utilizados</p>
+                    <p>• <strong>📥 Exportação completa:</strong> CSV com dados de códigos específicos</p>
+                    <p>• <strong>🔄 Integração total:</strong> Compatível com PDV de múltiplos códigos</p>
                     <p>• <strong>⌨️ Atalhos produtivos:</strong> Ctrl+N=Nova | Ctrl+F=Buscar</p>
-                    <p>• <strong>📋 Seleção múltipla:</strong> Excluir várias movimentações</p>
-                    <p>• <strong>🔔 Alertas inteligentes:</strong> Validação de estoque e produto</p>
+                    <p>• <strong>🎨 Interface visual:</strong> Categorias com ícones e cores</p>
+                    <p>• <strong>⚡ Controle automático:</strong> Estoque atualizado em tempo real</p>
+                    <p>• <strong>🔔 Validações inteligentes:</strong> Verificação de estoque e consistência</p>
                   </div>
                 </div>
               </div>
