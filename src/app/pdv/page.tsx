@@ -674,130 +674,152 @@ export default function PDV() {
     ))
   }
 
-  // 🆕 FINALIZAR VENDA ATUALIZADA
+  // 🔧 FINALIZAR VENDA CORRIGIDA - SEM CAMPOS UNDEFINED
   const finalizarVenda = async () => {
-    if (!user) {
-      toast.error('Erro de autenticação', 'Usuário não encontrado!')
-      return
-    }
+  if (!user) {
+    toast.error('Erro de autenticação', 'Usuário não encontrado!')
+    return
+  }
 
-    if (itensVenda.length === 0) {
-      toast.warning('Venda vazia', 'Adicione produtos à venda!')
-      return
-    }
+  if (itensVenda.length === 0) {
+    toast.warning('Venda vazia', 'Adicione produtos à venda!')
+    return
+  }
 
-    if (formaPagamento === 'dinheiro' && valorPago < totaisVenda.total) {
-      toast.warning('Valor insuficiente', 'Valor pago menor que o total da venda')
-      return
-    }
+  if (formaPagamento === 'dinheiro' && valorPago < totaisVenda.total) {
+    toast.warning('Valor insuficiente', 'Valor pago menor que o total da venda')
+    return
+  }
 
-    if (formaPagamento === 'prazo' && !clienteSelecionado) {
-      toast.warning('Cliente obrigatório', 'Selecione um cliente para venda a prazo')
-      return
-    }
+  if (formaPagamento === 'prazo' && !clienteSelecionado) {
+    toast.warning('Cliente obrigatório', 'Selecione um cliente para venda a prazo')
+    return
+  }
 
-    if (limiteExcedido) {
-      toast.error('Limite excedido', 'Valor da venda excede o limite de crédito do cliente')
-      return
-    }
+  if (limiteExcedido) {
+    toast.error('Limite excedido', 'Valor da venda excede o limite de crédito do cliente')
+    return
+  }
 
-    setLoading(true)
-    try {
-      const totalVenda = calcularTotalVenda()
-      const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
-      const valorDesconto = obterValorDesconto()
+  setLoading(true)
+  try {
+    const totalVenda = calcularTotalVenda()
+    const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
+    const valorDesconto = obterValorDesconto()
 
-      // 🆕 CRIAR MOVIMENTAÇÕES COM CÓDIGOS ESPECÍFICOS
-      const movimentacoesPromises = itensVenda.map(item => {
-        let observacao = vendaAtiva 
-          ? `Venda PDV - Modo Ativo` 
-          : `Venda PDV`
-        
-        if (clienteSelecionado) observacao += ` - Cliente: ${clienteSelecionado.nome}`
-        if (valorDesconto > 0) {
-          observacao += ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${descontoTotal.toFixed(2)}`}`
-        }
-
-        // 🆕 ADICIONAR INFORMAÇÃO DO CÓDIGO USADO
-        if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
-          observacao += ` - Código: ${item.codigoBarrasUsado}`
-        } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
-          observacao += ` - Produto Avulso`
-        }
-
-        const movimentacao: Movimentacao = {
-          id: '',
-          produto: item.produto.nome,
-          codigo: item.produto.codigo,
-          produtoId: item.produto.id,
-          tipo: 'saida',
-          quantidade: item.quantidade,
-          valorUnitario: item.valorUnitario,
-          valorTotal: item.valorTotal,
-          data: new Date().toLocaleDateString('pt-BR'),
-          hora: new Date().toLocaleTimeString('pt-BR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }),
-          observacao,
-          userId: user.uid,
-          codigoBarrasUsado: item.codigoBarrasUsado, // 🆕 CÓDIGO ESPECÍFICO
-          clienteId: clienteSelecionado?.id,
-          clienteNome: clienteSelecionado?.nome,
-          clienteCpfCnpj: clienteSelecionado?.cpfCnpj,
-          formaPagamento,
-          valorPago: formaPagamento === 'dinheiro' ? valorPago : totalVenda,
-          troco: totaisVenda.troco
-        }
-        return addMovimentacao(movimentacao)
-      })
-
-      // 🆕 ATUALIZAR ESTOQUE APENAS PARA PRODUTOS REAIS
-      const estoquePromises = itensVenda
-        .filter(item => item.produto.id.indexOf('temp_') !== 0) // Não atualizar produtos temporários
-        .map(item => {
-          const novoEstoque = item.produto.estoque - item.quantidade
-          return updateProduto(item.produto.id, { 
-            ...item.produto, 
-            estoque: novoEstoque 
-          })
-        })
-
-      await Promise.all([...movimentacoesPromises, ...estoquePromises])
-
-      setVendasDoDia(prev => prev + 1)
-      setFaturamentoDoDia(prev => prev + totalVenda)
-
-      imprimirCupom()
-      limparVenda()
-      setModalPagamentoAberto(false)
-
-      playSound('success')
+    // 🆕 CRIAR MOVIMENTAÇÕES SEM CAMPOS UNDEFINED
+    const movimentacoesPromises = itensVenda.map(item => {
+      let observacao = vendaAtiva 
+        ? `Venda PDV - Modo Ativo` 
+        : `Venda PDV`
       
-      const mensagemDesconto = valorDesconto > 0 
-        ? ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${valorDesconto.toFixed(2)}`}`
-        : ''
-      
-      toast.success(
-        '💰 Venda finalizada!', 
-        `Total: R$ ${totalVenda.toFixed(2)} - ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}${clienteSelecionado ? ` - ${clienteSelecionado.nome}` : ''}${mensagemDesconto}`
-      )
-
-      if (vendaAtiva) {
-        setTimeout(() => {
-          if (inputRef.current) {
-            inputRef.current.focus()
-          }
-        }, 100)
+      if (clienteSelecionado) observacao += ` - Cliente: ${clienteSelecionado.nome}`
+      if (valorDesconto > 0) {
+        observacao += ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${descontoTotal.toFixed(2)}`}`
       }
 
-    } catch (error) {
-      console.error('Erro ao finalizar venda:', error)
-      toast.error('Erro na venda', 'Não foi possível finalizar a venda')
-    } finally {
-      setLoading(false)
+      // Adicionar informação do código usado
+      if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
+        observacao += ` - Código: ${item.codigoBarrasUsado}`
+      } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
+        observacao += ` - Produto Avulso`
+      }
+
+      // 🔧 CAMPOS OBRIGATÓRIOS DA MOVIMENTAÇÃO
+      const movimentacaoBase = {
+        produto: item.produto.nome,
+        codigo: item.produto.codigo,
+        produtoId: item.produto.id,
+        tipo: 'saida' as const,
+        quantidade: item.quantidade,
+        valorUnitario: item.valorUnitario,
+        valorTotal: item.valorTotal,
+        data: new Date().toLocaleDateString('pt-BR'),
+        hora: new Date().toLocaleTimeString('pt-BR', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }),
+        observacao,
+        userId: user.uid,
+        formaPagamento,
+        valorPago: formaPagamento === 'dinheiro' ? valorPago : totalVenda,
+        troco: totaisVenda.troco
+      }
+
+      // 🔧 CAMPOS OPCIONAIS - SÓ ADICIONAR SE TIVEREM VALOR
+      const camposOpcionais: Partial<Movimentacao> = {}
+
+      // Código de barras usado
+      if (item.codigoBarrasUsado && item.codigoBarrasUsado.trim() !== '') {
+        camposOpcionais.codigoBarrasUsado = item.codigoBarrasUsado
+      }
+
+      // Dados do cliente (só se cliente estiver selecionado)
+      if (clienteSelecionado) {
+        camposOpcionais.clienteId = clienteSelecionado.id
+        camposOpcionais.clienteNome = clienteSelecionado.nome
+        camposOpcionais.clienteCpfCnpj = clienteSelecionado.cpfCnpj
+      }
+
+      // 🔧 COMBINAR E FILTRAR UNDEFINED
+      const movimentacaoCompleta = { ...movimentacaoBase, ...camposOpcionais }
+
+      // 🚀 FILTRO FINAL - REMOVER QUALQUER UNDEFINED
+      const movimentacaoLimpa = Object.fromEntries(
+        Object.entries(movimentacaoCompleta).filter(([_, value]) => value !== undefined)
+      ) as Omit<Movimentacao, 'id'>
+
+      console.log('Movimentação a ser salva:', movimentacaoLimpa) // Debug
+
+      return addMovimentacao(movimentacaoLimpa)
+    })
+
+    // Atualizar estoque apenas para produtos reais
+    const estoquePromises = itensVenda
+      .filter(item => item.produto.id.indexOf('temp_') !== 0)
+      .map(item => {
+        const novoEstoque = item.produto.estoque - item.quantidade
+        return updateProduto(item.produto.id, { 
+          ...item.produto, 
+          estoque: novoEstoque 
+        })
+      })
+
+    await Promise.all([...movimentacoesPromises, ...estoquePromises])
+
+    setVendasDoDia(prev => prev + 1)
+    setFaturamentoDoDia(prev => prev + totalVenda)
+
+    imprimirCupom()
+    limparVenda()
+    setModalPagamentoAberto(false)
+
+    playSound('success')
+    
+    const mensagemDesconto = valorDesconto > 0 
+      ? ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${valorDesconto.toFixed(2)}`}`
+      : ''
+    
+    toast.success(
+      '💰 Venda finalizada!', 
+      `Total: R$ ${totalVenda.toFixed(2)} - ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}${clienteSelecionado ? ` - ${clienteSelecionado.nome}` : ''}${mensagemDesconto}`
+    )
+
+    if (vendaAtiva) {
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      }, 100)
     }
+
+  } catch (error) {
+    console.error('Erro ao finalizar venda:', error)
+    toast.error('Erro na venda', 'Não foi possível finalizar a venda')
+  } finally {
+    setLoading(false)
   }
+}
 
   // Limpar venda
   const limparVenda = () => {
