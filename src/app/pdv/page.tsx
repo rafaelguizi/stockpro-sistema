@@ -821,32 +821,38 @@ export default function PDV() {
   }
 }
 
-  // Limpar venda
-  const limparVenda = () => {
-    if (itensVenda.length === 0) return
-    
-    if (confirm('Tem certeza que deseja limpar a venda?')) {
-      setItensVenda([])
-      setDescontoTotal(0)
-      setDescontoPercentual(0)
-      setTipoDesconto('percentual')
-      setClienteSelecionado(null)
-      setBuscarCliente('')
-      setFormaPagamento('dinheiro')
-      setValorPago(0)
-      setMostrarProdutos(false)
-      setMostrarProdutosSemCodigo(false)
-      setCategoriaSelecionada('')
-      setBuscaProduto('')
-      toast.info('🧹 Venda limpa', 'Todos os itens foram removidos')
-      
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
-        }
-      }, 100)
-    }
+  // 🔧 LIMPAR VENDA ATUALIZADA - COM PARÂMETRO OPCIONAL
+  const limparVenda = (semConfirmacao: boolean = false) => {
+  if (itensVenda.length === 0) return
+  
+  // 🆕 SÓ MOSTRAR CONFIRMAÇÃO SE NÃO FOR AUTOMÁTICO
+  if (!semConfirmacao && !confirm('Tem certeza que deseja limpar a venda?')) {
+    return
   }
+  
+  setItensVenda([])
+  setDescontoTotal(0)
+  setDescontoPercentual(0)
+  setTipoDesconto('percentual')
+  setClienteSelecionado(null)
+  setBuscarCliente('')
+  setFormaPagamento('dinheiro')
+  setValorPago(0)
+  setMostrarProdutos(false)
+  setMostrarProdutosSemCodigo(false)
+  setCategoriaSelecionada('')
+  setBuscaProduto('')
+  
+  if (!semConfirmacao) {
+    toast.info('🧹 Venda limpa', 'Todos os itens foram removidos')
+  }
+  
+  setTimeout(() => {
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, 100)
+}
 
   // Iniciar scanner
   const iniciarScanner = async () => {
