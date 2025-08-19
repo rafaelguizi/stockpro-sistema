@@ -167,31 +167,31 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
       </div>
 
       {/* Formulário para adicionar código */}
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <div className="sm:col-span-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={novoCodigoInput}
-              onChange={(e) => setNovoCodigoInput(e.target.value)}
-              placeholder="Digite ou escaneie o código de barras..."
-              className="w-full border-2 border-gray-800 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
-              disabled={disabled}
-            />
-          </div>
-          
-          <div>
-            <input
-              type="number"
-              min="1"
-              value={quantidadeAdicionar}
-              onChange={(e) => setQuantidadeAdicionar(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-full border-2 border-gray-800 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
-              placeholder="Qtd"
-              disabled={disabled}
-            />
-          </div>
+<form onSubmit={handleSubmit} className="space-y-3">
+  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+    <div className="sm:col-span-2">
+      <input
+        ref={inputRef}
+        type="text"
+        value={novoCodigoInput}
+        onChange={(e) => setNovoCodigoInput(e.target.value)}
+        placeholder="Digite ou escaneie o código de barras..."
+        className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-gray-600"
+        disabled={disabled}
+      />
+    </div>
+    
+    <div>
+      <input
+        type="number"
+        min="1"
+        value={quantidadeAdicionar}
+        onChange={(e) => setQuantidadeAdicionar(Math.max(1, parseInt(e.target.value) || 1))}
+        className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200 placeholder-gray-600"
+        placeholder="Qtd"
+        disabled={disabled}
+      />
+    </div>
           
           <div className="flex space-x-2">
             <LoadingButton
