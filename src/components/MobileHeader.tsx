@@ -1,8 +1,9 @@
 // src/components/MobileHeader.tsx
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermissions } from '@/hooks/usePermissions'
 import LoadingButton from './LoadingButton'
 
 interface MobileHeaderProps {
@@ -13,7 +14,8 @@ interface MobileHeaderProps {
 
 export default function MobileHeader({ title, currentPage, userEmail }: MobileHeaderProps) {
   const router = useRouter()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
+  const { permissions } = usePermissions()
   const [menuAberto, setMenuAberto] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -32,56 +34,80 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
     localStorage.setItem('stockpro_sidebar_collapsed', JSON.stringify(newState))
   }
 
-  const menuItems = [
+  // ✅ FUNÇÃO AUXILIAR PARA VERIFICAR SE É ADMIN
+  const isAdmin = () => user?.role === 'COMPANY_ADMIN' || user?.role === 'SUPER_ADMIN'
+
+  // ✅ MENU ITEMS COM VERIFICAÇÕES SEGURAS
+  const allMenuItems = [
     {
       name: 'Dashboard',
       href: '/dashboard',
       icon: '📊',
-      description: 'Visão geral do negócio'
+      description: 'Visão geral do negócio',
+      checkAccess: () => true, // Dashboard sempre disponível
     },
     {
       name: 'Produtos',
       href: '/produtos',
       icon: '📦',
-      description: 'Gestão de produtos'
+      description: 'Gestão de produtos',
+      checkAccess: () => permissions.canViewProducts,
     },
     {
       name: 'Categorias',
       href: '/categorias',
       icon: '📂',
-      description: 'Organizar produtos'
+      description: 'Organizar produtos',
+      checkAccess: () => isAdmin(), // Só admins
     },
     {
       name: 'Clientes',
       href: '/clientes',
       icon: '👥',
-      description: 'Gestão de clientes'
+      description: 'Gestão de clientes',
+      checkAccess: () => isAdmin(), // Só admins
     },
     {
       name: 'Fornecedores',
       href: '/fornecedores',
       icon: '🏭',
-      description: 'Gestão de fornecedores'
+      description: 'Gestão de fornecedores',
+      checkAccess: () => permissions.canManageSuppliers || isAdmin(),
     },
     {
       name: 'PDV',
       href: '/pdv',
       icon: '💰',
-      description: 'Ponto de venda'
+      description: 'Ponto de venda',
+      checkAccess: () => permissions.canAccessPDV,
     },
     {
       name: 'Movimentações',
       href: '/movimentacoes',
       icon: '📋',
-      description: 'Histórico de estoque'
+      description: 'Histórico de estoque',
+      checkAccess: () => isAdmin(), // Só admins
     },
     {
       name: 'Relatórios',
       href: '/relatorios',
       icon: '📈',
-      description: 'Análises e relatórios'
+      description: 'Análises e relatórios',
+      checkAccess: () => permissions.canViewFullReports || isAdmin(),
+    },
+    {
+      name: 'Equipe',
+      href: '/equipe',
+      icon: '👥',
+      description: 'Gestão de funcionários',
+      checkAccess: () => permissions.canManageUsers && isAdmin(),
     }
   ]
+
+  // ✅ FILTRAR ITENS BASEADO NAS VERIFICAÇÕES
+  const menuItems = useMemo(() => {
+    return allMenuItems.filter(item => item.checkAccess())
+  }, [permissions, user?.role])
 
   const handleLogout = async () => {
     try {
@@ -93,6 +119,22 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
   }
 
   const isCurrentPage = (href: string) => currentPage === href
+
+  // ✅ FUNÇÃO PARA OBTER TEXTO DO ROLE
+  const getRoleText = (role: string) => {
+    switch (role) {
+      case 'COMPANY_ADMIN':
+        return '👑 Administrador'
+      case 'EMPLOYEE':
+        return '👤 Funcionário'
+      case 'COMPANY_USER':
+        return '👤 Usuário'
+      case 'SUPER_ADMIN':
+        return '🛡️ Super Admin'
+      default:
+        return 'Usuário'
+    }
+  }
 
   return (
     <>
@@ -160,7 +202,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
                   <p className="text-sm font-medium text-gray-900 truncate">
                     {userEmail || 'Usuário'}
                   </p>
-                  <p className="text-xs text-gray-500">Administrador</p>
+                  <p className="text-xs text-gray-500">{getRoleText(user?.role || '')}</p>
                 </div>
               </div>
             </div>
@@ -210,14 +252,14 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
       )}
 
       {/* Sidebar Desktop */}
-      <div className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200 lg:shadow-lg transition-all duration-300 ease-in-out ${
+      <div className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:bg-white lg:border-r lg:border-gray-200 lg:shadow-lg transition-all duration-300 ease-in-out z-30 ${
         sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'
       }`}>
 
         {/* Header da Sidebar */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-4 text-white relative">
           <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            {/* 🆕 Logo APENAS quando expandido - SEM "S" quando minimizado */}
+            {/* Logo APENAS quando expandido */}
             {!sidebarCollapsed && (
               <>
                 <div className="w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
@@ -231,7 +273,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
             )}
           </div>
 
-          {/* 🆕 Botão de Toggle - Posição ajustada para quando não há logo */}
+          {/* Botão de Toggle */}
           <button
             onClick={toggleSidebar}
             className={`absolute rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200 p-1 ${
@@ -239,7 +281,6 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
             }`}
             title={sidebarCollapsed ? 'Expandir menu' : 'Minimizar menu'}
           >
-            {/* Emoji condicional - sem rotação */}
             <span className="text-lg transition-all duration-200">
               {sidebarCollapsed ? '▶️' : '◀️'}
             </span>
@@ -259,7 +300,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {userEmail || 'Usuário'}
                 </p>
-                <p className="text-xs text-gray-500">Administrador</p>
+                <p className="text-xs text-gray-500">{getRoleText(user?.role || '')}</p>
               </div>
             </div>
           </div>
@@ -270,7 +311,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
           <div className="p-2 border-b border-gray-200 bg-gray-50 flex justify-center">
             <div
               className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-              title={userEmail || 'Usuário'}
+              title={`${userEmail || 'Usuário'} - ${getRoleText(user?.role || '')}`}
             >
               <span className="text-white font-bold text-sm">
                 {userEmail?.charAt(0).toUpperCase() || 'U'}
@@ -308,7 +349,7 @@ export default function MobileHeader({ title, currentPage, userEmail }: MobileHe
                 )}
               </button>
 
-              {/* Tooltip melhorado para sidebar colapsada */}
+              {/* Tooltip para sidebar colapsada */}
               {sidebarCollapsed && (
                 <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 whitespace-nowrap shadow-xl">
                   <div className="font-medium">{item.name}</div>

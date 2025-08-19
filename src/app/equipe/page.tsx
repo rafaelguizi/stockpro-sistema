@@ -204,7 +204,7 @@ export default function EquipePage() {
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">�� Gestão de Equipe</h1>
+              <h1 className="text-3xl font-bold text-gray-900">🚀 Gestão de Equipe</h1>
               <p className="text-gray-600 mt-1">Gerencie funcionários e permissões da sua empresa</p>
               <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
                 <span>🏢 {user?.companyName}</span>
@@ -296,7 +296,7 @@ export default function EquipePage() {
 
         {/* Formulário de Criação */}
         {showForm && (
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <div className="block text-sm font-medium text-gray-700 mb-1">
             <h2 className="text-xl font-semibold mb-4">➕ Adicionar Novo Funcionário</h2>
             
             <form onSubmit={handleCreateEmployee} className="space-y-4">
@@ -459,7 +459,7 @@ export default function EquipePage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="text-2xl mr-3">
-                            {member.role === 'COMPANY_ADMIN' ? '��' : '👤'}
+                            {member.role === 'COMPANY_ADMIN' ? '👥' : '👤'}
                           </div>
                           <div>
                             <div className="text-sm font-medium text-gray-900">
