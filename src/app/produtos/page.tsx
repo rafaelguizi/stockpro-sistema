@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL INTEGRADA COM MOVIMENTAÇÕES
+// src/app/produtos/page.tsx - VERSÃO FINAL CORRIGIDA COM CONTAGEM DE CÓDIGOS
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,16 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// �� INTERFACE PRODUTO ATUALIZADA
+// �� INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
   categoriaId?: string
-  codigosBarras: string[]      // 🆕 Array de códigos
-  temCodigoBarras: boolean     // 🆕 Controle se usa código
-  isDestilado: boolean         // 🆕 Bebida sem validade
+  codigosBarras: Record<string, number>  // 🆕 Objeto com código: quantidade
+  temCodigoBarras: boolean
+  isDestilado: boolean
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -91,10 +91,10 @@ interface CategoriaProduto {
   campos: CampoEspecifico[]
 }
 
-// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS DE BARRAS MELHORADO
+// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS CORRIGIDO
 interface GerenciadorCodigosBarrasProps {
-  codigos: string[]
-  onChange: (codigos: string[]) => void
+  codigos: Record<string, number>  // 🆕 Mudança aqui
+  onChange: (codigos: Record<string, number>) => void  // 🆕 Mudança aqui
   disabled?: boolean
   onScanear?: () => void
   produtoId?: string
@@ -110,6 +110,12 @@ function GerenciadorCodigosBarras({
   ultimasMovimentacoes 
 }: GerenciadorCodigosBarrasProps) {
   const [novoCodigo, setNovoCodigo] = useState('')
+  const [quantidade, setQuantidade] = useState(1)
+
+  // 🆕 VERIFICAR QUANTIDADE DE CÓDIGO ESPECÍFICO
+  const verificarQuantidadeDisponivel = useCallback((codigo: string) => {
+    return codigos[codigo] || 0
+  }, [codigos])
 
   // 🆕 VERIFICAR SE CÓDIGO FOI USADO RECENTEMENTE
   const verificarUsoRecente = useCallback((codigo: string) => {
@@ -122,102 +128,157 @@ function GerenciadorCodigosBarras({
     return usoRecente
   }, [ultimasMovimentacoes, produtoId])
 
+  // 🆕 ADICIONAR COM QUANTIDADE
   const adicionarCodigo = () => {
-    if (novoCodigo.trim() && !codigos.includes(novoCodigo.trim())) {
-      onChange([...codigos, novoCodigo.trim()])
+    if (novoCodigo.trim()) {
+      const novosCodigos = { ...codigos }
+      novosCodigos[novoCodigo.trim()] = (novosCodigos[novoCodigo.trim()] || 0) + quantidade
+      onChange(novosCodigos)
       setNovoCodigo('')
+      setQuantidade(1)
     }
   }
 
-  const removerCodigo = (index: number) => {
-    const novoscodigos = codigos.filter((_, i) => i !== index)
-    onChange(novoscodigos)
+  // 🆕 REMOVER CÓDIGO COMPLETAMENTE
+  const removerCodigo = (codigo: string) => {
+    const novosCodigos = { ...codigos }
+    delete novosCodigos[codigo]
+    onChange(novosCodigos)
   }
 
+  // 🆕 ALTERAR QUANTIDADE DE UM CÓDIGO
+  const alterarQuantidade = (codigo: string, novaQuantidade: number) => {
+    if (novaQuantidade <= 0) {
+      removerCodigo(codigo)
+    } else {
+      const novosCodigos = { ...codigos }
+      novosCodigos[codigo] = novaQuantidade
+      onChange(novosCodigos)
+    }
+  }
+
+  // 🆕 REPLICAR CÓDIGO
   const replicarCodigo = (codigo: string) => {
-    const quantidade = prompt('Quantas unidades com este código?', '1')
-    if (quantidade && parseInt(quantidade) > 1) {
-      const novosCodigos = Array(parseInt(quantidade) - 1).fill(codigo)
-      onChange([...codigos, ...novosCodigos])
+    const quantidadeAdicional = prompt('Quantas unidades adicionais?', '1')
+    if (quantidadeAdicional && parseInt(quantidadeAdicional) > 0) {
+      alterarQuantidade(codigo, verificarQuantidadeDisponivel(codigo) + parseInt(quantidadeAdicional))
     }
   }
 
   return (
     <div className="space-y-4">
       {/* Campo para adicionar novo código */}
-      <div className="flex space-x-2">
-        <input
-          type="text"
-          value={novoCodigo}
-          onChange={(e) => setNovoCodigo(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && adicionarCodigo()}
-          className="flex-1 border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
-          placeholder="Digite ou escaneie um código de barras"
-          disabled={disabled}
-        />
-        <LoadingButton
-          type="button"
-          onClick={adicionarCodigo}
-          variant="primary"
-          size="sm"
-          disabled={disabled || !novoCodigo.trim()}
-        >
-          ➕
-        </LoadingButton>
-        {onScanear && (
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        <div className="sm:col-span-2">
+          <input
+            type="text"
+            value={novoCodigo}
+            onChange={(e) => setNovoCodigo(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && adicionarCodigo()}
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            placeholder="Digite ou escaneie um código de barras"
+            disabled={disabled}
+          />
+        </div>
+        <div>
+          <input
+            type="number"
+            min="1"
+            value={quantidade}
+            onChange={(e) => setQuantidade(parseInt(e.target.value) || 1)}
+            className="w-full border-2 border-gray-400 rounded-lg px-3 py-2 text-gray-900 font-medium bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm text-sm transition-all duration-200"
+            placeholder="Qtd"
+            disabled={disabled}
+          />
+        </div>
+        <div className="flex space-x-1">
           <LoadingButton
             type="button"
-            onClick={onScanear}
-            variant="secondary"
+            onClick={adicionarCodigo}
+            variant="primary"
             size="sm"
-            disabled={disabled}
+            disabled={disabled || !novoCodigo.trim()}
+            className="flex-1"
           >
-            📱
+            ➕
           </LoadingButton>
-        )}
+          {onScanear && (
+            <LoadingButton
+              type="button"
+              onClick={onScanear}
+              variant="secondary"
+              size="sm"
+              disabled={disabled}
+            >
+              📱
+            </LoadingButton>
+          )}
+        </div>
       </div>
 
-      {/* Lista de códigos */}
-      {codigos.length > 0 && (
+      {/* Lista de códigos com quantidades */}
+      {Object.keys(codigos).length > 0 && (
         <div className="space-y-2">
-          <h6 className="text-sm font-bold text-gray-800">Códigos cadastrados ({codigos.length}):</h6>
-          <div className="max-h-32 overflow-y-auto space-y-2 bg-gray-50 p-3 rounded-lg border">
-            {codigos.map((codigo, index) => {
+          <h6 className="text-sm font-bold text-gray-800">
+            Códigos cadastrados ({Object.keys(codigos).length} tipos, {Object.values(codigos).reduce((a, b) => a + b, 0)} unidades):
+          </h6>
+          <div className="max-h-40 overflow-y-auto space-y-2 bg-gray-50 p-3 rounded-lg border">
+            {Object.entries(codigos).map(([codigo, qtd]) => {
               const usoRecente = verificarUsoRecente(codigo)
               
               return (
-                <div key={index} className={`flex items-center justify-between p-2 rounded border ${
+                <div key={codigo} className={`flex items-center justify-between p-3 rounded border ${
                   usoRecente ? 'bg-red-50 border-red-200' : 'bg-white'
                 }`}>
                   <div className="flex-1">
-                    <span className="font-mono text-sm text-gray-900">{codigo}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm text-gray-900">{codigo}</span>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => alterarQuantidade(codigo, qtd - 1)}
+                          className="text-red-600 hover:text-red-800 text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                          disabled={disabled || qtd <= 1}
+                        >
+                          ➖
+                        </button>
+                        <span className="font-bold text-blue-600 min-w-[3rem] text-center bg-blue-50 px-2 py-1 rounded">
+                          {qtd} un.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => alterarQuantidade(codigo, qtd + 1)}
+                          className="text-green-600 hover:text-green-800 text-sm px-2 py-1 rounded hover:bg-green-50 transition-colors"
+                          disabled={disabled}
+                        >
+                          ➕
+                        </button>
+                      </div>
+                    </div>
                     {/* 🆕 ALERTA DE USO RECENTE */}
                     {usoRecente && (
                       <div className="text-xs text-red-600 mt-1 flex items-center">
                         <span className="mr-1">⚠️</span>
-                        {usoRecente.tipo === 'saida' ? 'Removido' : 'Usado'} em {usoRecente.data}
-                        {usoRecente.tipo === 'saida' && (
-                          <span className="ml-1 font-bold">(Código não existe mais no produto)</span>
-                        )}
+                        {usoRecente.tipo === 'saida' ? 'Usado em venda' : 'Usado em entrada'} em {usoRecente.data}
                       </div>
                     )}
                   </div>
-                  <div className="flex space-x-1">
+                  <div className="flex space-x-1 ml-3">
                     <button
                       type="button"
                       onClick={() => replicarCodigo(codigo)}
                       className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                       disabled={disabled}
-                      title="Replicar código"
+                      title="Adicionar mais unidades"
                     >
                       📋
                     </button>
                     <button
                       type="button"
-                      onClick={() => removerCodigo(index)}
+                      onClick={() => removerCodigo(codigo)}
                       className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
                       disabled={disabled}
-                      title="Remover código"
+                      title="Remover código completamente"
                     >
                       ❌
                     </button>
@@ -229,19 +290,21 @@ function GerenciadorCodigosBarras({
         </div>
       )}
 
-      {/* Dicas */}
+      {/* Dicas atualizadas */}
       <div className="text-xs text-gray-500 space-y-1">
-        <p>💡 <strong>Dica:</strong> Use 📋 para replicar o mesmo código para várias unidades</p>
-        <p>🎯 <strong>Exemplo:</strong> 3 Camparis com códigos diferentes, ou 5 refrigerantes iguais</p>
+        <p>💡 <strong>Sistema de contagem:</strong> Cada código registra quantas unidades existem</p>
+        <p>🎯 <strong>Exemplo:</strong> 4 cervejas Skol com mesmo código = 1 código com quantidade 4</p>
+        <p>🔄 <strong>Vendas:</strong> Cada venda remove apenas 1 unidade do código específico</p>
+        <p>📋 <strong>Gestão:</strong> Use ➕/➖ para ajustar quantidades ou 📋 para adicionar mais</p>
         {produtoId && (
-          <p>🔄 <strong>Sincronização:</strong> Códigos são atualizados automaticamente quando usados em vendas</p>
+          <p>🔄 <strong>Sincronização:</strong> Quantidades são atualizadas automaticamente quando usadas em vendas</p>
         )}
       </div>
     </div>
   )
 }
 
-// Categorias inteligentes atualizadas (MANTIDAS ORIGINAIS)
+// Categorias inteligentes (MANTIDAS ORIGINAIS)
 const CATEGORIAS_INTELIGENTES: CategoriaProduto[] = [
   {
     id: 'alimentos',
@@ -554,7 +617,7 @@ export default function Produtos() {
   const { user } = useAuth()
   const toast = useToastContext()
   
-  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR
+  // Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
@@ -575,13 +638,13 @@ export default function Produtos() {
     }
   }, [])
   
-  // 🆕 HOOK PARA CATEGORIAS FIRESTORE
+  // Hook para categorias Firestore
   const { 
     data: categoriasFirestore,
     loading: loadingCategorias
   } = useFirestore<CategoriaFirestore>('categorias')
   
-  // 🆕 HOOK PARA MOVIMENTAÇÕES (PARA SINCRONIZAÇÃO)
+  // Hook para movimentações (para sincronização)
   const { 
     data: movimentacoes,
     loading: loadingMovimentacoes
@@ -594,7 +657,7 @@ export default function Produtos() {
     addDocument, 
     updateDocument, 
     deleteDocument,
-    refetch: refetchProdutos // 🆕 FUNÇÃO PARA RECARREGAR DADOS
+    refetch: refetchProdutos
   } = useFirestore<Produto>('produtos')
 
   const [showForm, setShowForm] = useState(false)
@@ -603,7 +666,6 @@ export default function Produtos() {
   const [novaCategoria, setNovaCategoria] = useState('')
   const [showScanner, setShowScanner] = useState(false)
   const [loading, setLoading] = useState(false)
-  // 🆕 ESTADO PARA CONTROLAR SINCRONIZAÇÃO
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState<Date>(new Date())
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -612,12 +674,12 @@ export default function Produtos() {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('')
   const [camposEspecificos, setCamposEspecificos] = useState<Record<string, any>>({})
 
-  // 🆕 ESTADOS DO FORMULÁRIO ATUALIZADOS
+  // 🆕 ESTADOS DO FORMULÁRIO CORRIGIDOS
   const [formData, setFormData] = useState({
     nome: '',
     categoria: '',
     categoriaId: '',
-    codigosBarras: [] as string[],
+    codigosBarras: {} as Record<string, number>,  // 🆕 Objeto em vez de array
     temCodigoBarras: true,
     isDestilado: false,
     estoqueMinimo: '',
@@ -639,14 +701,13 @@ export default function Produtos() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroValidade, setFiltroValidade] = useState('')
 
-  // 🆕 SINCRONIZAÇÃO AUTOMÁTICA COM MOVIMENTAÇÕES
+  // Sincronização automática com movimentações
   useEffect(() => {
     if (movimentacoes && produtos) {
       const agora = new Date()
       const diferencaMs = agora.getTime() - ultimaSincronizacao.getTime()
       const diferencaMinutos = diferencaMs / (1000 * 60)
 
-      // Se passou mais de 1 minuto desde a última sincronização, recarregar
       if (diferencaMinutos > 1) {
         console.log('🔄 Sincronizando dados de produtos com movimentações...')
         refetchProdutos()
@@ -655,10 +716,9 @@ export default function Produtos() {
     }
   }, [movimentacoes, produtos, ultimaSincronizacao, refetchProdutos])
 
-  // 🆕 ALERTAS DE CÓDIGOS REMOVIDOS
+  // Alertas de códigos removidos
   useEffect(() => {
     if (movimentacoes && produtos) {
-      // Verificar se há movimentações de saída recentes que removeram códigos
       const movimentacoesRecentes = movimentacoes
         .filter(mov => {
           const dataMovimentacao = new Date(mov.data.split('/').reverse().join('-'))
@@ -670,18 +730,18 @@ export default function Produtos() {
       if (movimentacoesRecentes.length > 0) {
         const codigosRemovidos = movimentacoesRecentes.length
         if (codigosRemovidos > 0) {
-          console.log(`📱 ${codigosRemovidos} códigos foram removidos por movimentações recentes`)
+          console.log(`📱 ${codigosRemovidos} códigos foram utilizados em movimentações recentes`)
         }
       }
     }
   }, [movimentacoes, produtos])
 
-  // 🆕 CATEGORIAS ATIVAS FIRESTORE
+  // Categorias ativas Firestore
   const categoriasAtivasFirestore = useMemo(() => {
     return categoriasFirestore?.filter(cat => cat.ativo) || []
   }, [categoriasFirestore])
 
-  // 🆕 FUNÇÃO PARA OBTER DADOS DA CATEGORIA
+  // Função para obter dados da categoria
   const obterDadosCategoria = useCallback((produto: Produto) => {
     if (produto.categoriaId && categoriasFirestore) {
       const categoria = categoriasFirestore.find(cat => cat.id === produto.categoriaId)
@@ -748,7 +808,7 @@ export default function Produtos() {
     return { status, diasRestantes, textoVencimento }
   }
 
-  // Gerar próximo código automaticamente (MANTIDO ORIGINAL)
+  // Gerar próximo código automaticamente
   const gerarProximoCodigo = () => {
     if (!produtos) return '001'
     const produtosAtivos = produtos.filter(p => p.ativo)
@@ -756,7 +816,7 @@ export default function Produtos() {
     return proximoNumero.toString().padStart(3, '0')
   }
 
-  // 🆕 FUNÇÃO PARA LIDAR COM MUDANÇA DE CATEGORIA FIRESTORE
+  // Função para lidar com mudança de categoria Firestore
   const handleCategoriaFirestoreChange = (categoriaId: string) => {
     const categoria = categoriasFirestore?.find(cat => cat.id === categoriaId)
     
@@ -774,7 +834,7 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO PARA LIDAR COM MUDANÇA DE CATEGORIA INTELIGENTE
+  // Função para lidar com mudança de categoria inteligente
   const handleCategoriaChange = (nomeCategoria: string) => {
     const categoriaInteligente = CATEGORIAS_INTELIGENTES.find(cat => cat.nome === nomeCategoria)
     
@@ -790,7 +850,7 @@ export default function Produtos() {
     setCamposEspecificos({})
   }
 
-  // Função para lidar com campos específicos (MANTIDA ORIGINAL)
+  // Função para lidar com campos específicos
   const handleCampoEspecifico = (campo: string, valor: any) => {
     setCamposEspecificos(prev => ({
       ...prev,
@@ -805,13 +865,13 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO PARA VALIDAR CÓDIGOS ÚNICOS MELHORADA
-  const validarCodigosUnicos = (novoscodigos: string[], produtoEditando?: string) => {
+  // 🆕 FUNÇÃO PARA VALIDAR CÓDIGOS ÚNICOS CORRIGIDA
+  const validarCodigosUnicos = (novoscodigos: Record<string, number>, produtoEditando?: string) => {
     if (!produtos) return true
 
-    for (const codigo of novoscodigos) {
+    for (const codigo of Object.keys(novoscodigos)) {
       const produtoExistente = produtos.find(p => 
-        p.codigosBarras?.includes(codigo) && p.id !== produtoEditando
+        p.codigosBarras && Object.keys(p.codigosBarras).includes(codigo) && p.id !== produtoEditando
       )
       
       if (produtoExistente) {
@@ -850,25 +910,26 @@ export default function Produtos() {
     setShowScanner(false)
   }
 
-  // 🆕 FUNÇÃO SIMULAR LEITURA ATUALIZADA
+  // 🆕 FUNÇÃO SIMULAR LEITURA CORRIGIDA
   const simularLeituraCodigoBarras = () => {
     const codigoSimulado = Math.random().toString().substr(2, 13)
-    const novoscodigos = [...formData.codigosBarras, codigoSimulado]
+    const novoscodigos = { ...formData.codigosBarras }
+    novoscodigos[codigoSimulado] = (novoscodigos[codigoSimulado] || 0) + 1
     
-    if (validarCodigosUnicos([codigoSimulado], editingId || undefined)) {
+    if (validarCodigosUnicos({ [codigoSimulado]: 1 }, editingId || undefined)) {
       setFormData({...formData, codigosBarras: novoscodigos})
       pararScanner()
       toast.success('Código escaneado!', `Código: ${codigoSimulado} adicionado`)
     }
   }
 
-  // 🆕 FUNÇÃO resetForm ATUALIZADA
+  // 🆕 FUNÇÃO resetForm CORRIGIDA
   const resetForm = () => {
     setFormData({
       nome: '',
       categoria: '',
       categoriaId: '',
-      codigosBarras: [],
+      codigosBarras: {},  // �� Objeto vazio
       temCodigoBarras: true,
       isDestilado: false,
       estoqueMinimo: '',
@@ -910,7 +971,7 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO handleSubmit ATUALIZADA
+  // 🆕 FUNÇÃO handleSubmit CORRIGIDA
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
@@ -927,7 +988,8 @@ export default function Produtos() {
         return
       }
 
-      if (formData.temCodigoBarras && formData.codigosBarras.length === 0) {
+      // 🆕 VALIDAÇÃO DE CÓDIGOS CORRIGIDA
+      if (formData.temCodigoBarras && Object.keys(formData.codigosBarras).length === 0) {
         toast.warning('Código de barras obrigatório', 'Adicione pelo menos um código de barras ou desmarque a opção!')
         return
       }
@@ -985,7 +1047,7 @@ export default function Produtos() {
           gerarProximoCodigo(),
         nome: nomeParaValidar,
         categoria: formData.categoria,
-        codigosBarras: formData.temCodigoBarras ? formData.codigosBarras : [],
+        codigosBarras: formData.temCodigoBarras ? formData.codigosBarras : {},  // 🆕 Objeto em vez de array
         temCodigoBarras: formData.temCodigoBarras,
         isDestilado: formData.isDestilado,
         estoqueMinimo,
@@ -1057,7 +1119,6 @@ export default function Produtos() {
         toast.success('Produto cadastrado!', `Código ${produtoLimpo.codigo} criado!`)
       }
 
-      // 🆕 FORÇAR RECARREGAMENTO APÓS SALVAR
       setTimeout(() => {
         refetchProdutos()
         setUltimaSincronizacao(new Date())
@@ -1072,24 +1133,22 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FUNÇÃO handleEdit ATUALIZADA COM VALIDAÇÃO DE SINCRONIZAÇÃO
+  // 🆕 FUNÇÃO handleEdit CORRIGIDA
   const handleEdit = async (produto: Produto) => {
     setLoading(true)
     try {
-      // 🆕 VERIFICAR SE PRODUTO AINDA EXISTE E TEM OS MESMOS CÓDIGOS
       if (movimentacoes) {
         const movimentacoesRecentes = movimentacoes
           .filter(mov => mov.produtoId === produto.id && mov.tipo === 'saida' && mov.codigoBarrasUsado)
           .sort((a, b) => new Date(b.data + ' ' + b.hora).getTime() - new Date(a.data + ' ' + a.hora).getTime())
 
         if (movimentacoesRecentes.length > 0) {
-          const codigosRemovidos = movimentacoesRecentes.map(mov => mov.codigoBarrasUsado).filter(Boolean)
-          if (codigosRemovidos.length > 0) {
+          const codigosUtilizados = movimentacoesRecentes.map(mov => mov.codigoBarrasUsado).filter(Boolean)
+          if (codigosUtilizados.length > 0) {
             toast.info(
-              'Códigos foram removidos', 
-              `${codigosRemovidos.length} código(s) foram removidos por vendas recentes. Os dados serão atualizados.`
+              'Códigos foram utilizados', 
+              `${codigosUtilizados.length} código(s) foram utilizados em vendas recentes. Os dados serão atualizados.`
             )
-            // Forçar recarregamento antes de editar
             await refetchProdutos()
           }
         }
@@ -1103,7 +1162,7 @@ export default function Produtos() {
         nome: produto.nome,
         categoria: produto.categoria,
         categoriaId: produto.categoriaId || '',
-        codigosBarras: produto.codigosBarras || [],
+        codigosBarras: produto.codigosBarras || {},  // 🆕 Objeto em vez de array
         temCodigoBarras: produto.temCodigoBarras ?? true,
         isDestilado: produto.isDestilado || false,
         estoqueMinimo: produto.estoqueMinimo.toString(),
@@ -1141,7 +1200,6 @@ export default function Produtos() {
         await deleteDocument(id)
         toast.success('Produto excluído!', 'Produto removido com sucesso!')
         
-        // 🆕 FORÇAR RECARREGAMENTO APÓS EXCLUSÃO
         setTimeout(() => {
           refetchProdutos()
           setUltimaSincronizacao(new Date())
@@ -1171,7 +1229,6 @@ export default function Produtos() {
         `Status alterado com sucesso!`
       )
 
-      // 🆕 FORÇAR RECARREGAMENTO APÓS ALTERAR STATUS
       setTimeout(() => {
         refetchProdutos()
         setUltimaSincronizacao(new Date())
@@ -1184,12 +1241,13 @@ export default function Produtos() {
     }
   }
 
-  // 🆕 FILTRAR PRODUTOS ATUALIZADO
+  // 🆕 FILTRAR PRODUTOS CORRIGIDO
   const produtosFiltrados = produtos ? produtos.filter(produto => {
     const matchBusca = produto.nome.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.codigo.toLowerCase().includes(busca.toLowerCase()) ||
                       produto.categoria.toLowerCase().includes(busca.toLowerCase()) ||
-                      produto.codigosBarras?.some(codigo => 
+                      // 🆕 BUSCAR EM CÓDIGOS CORRIGIDO
+                      Object.keys(produto.codigosBarras || {}).some(codigo => 
                         codigo.toLowerCase().includes(busca.toLowerCase())
                       ) ||
                       produto.marca?.toLowerCase().includes(busca.toLowerCase()) ||
@@ -1231,7 +1289,7 @@ export default function Produtos() {
     return matchBusca && matchCategoria && matchStatus && matchValidade
   }) : []
 
-  // 🆕 CATEGORIAS PARA FILTRO COMBINADAS
+  // Categorias para filtro combinadas
   const categoriasParaFiltro = useMemo(() => {
     const categoriasProdutos = produtos ? [...new Set(produtos.map(p => p.categoria))].filter(Boolean) : []
     const categoriasFirestoreNomes = categoriasAtivasFirestore.map(cat => cat.nome)
@@ -1240,7 +1298,7 @@ export default function Produtos() {
     return todasCategorias.sort()
   }, [produtos, categoriasAtivasFirestore])
 
-  // Estatísticas de validade (MANTIDAS ORIGINAIS)
+  // Estatísticas de validade
   const estatisticasValidade = produtos ? {
     vencidos: produtos.filter(p => verificarValidade(p).status === 'vencido').length,
     vencendoHoje: produtos.filter(p => verificarValidade(p).status === 'vence_hoje').length,
@@ -1280,7 +1338,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 ALERTA DE SINCRONIZAÇÃO ATIVA */}
+          {/* Alerta de sincronização ativa */}
           {!loadingProdutos && !loadingMovimentacoes && movimentacoes && (
             <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 animate-slide-up">
               <div className="flex">
@@ -1289,10 +1347,10 @@ export default function Produtos() {
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-green-800">
-                    Sistema Sincronizado com Movimentações
+                    Sistema Sincronizado com Contagem de Códigos
                   </h3>
                   <div className="mt-2 text-sm text-green-700">
-                    <p>✅ Produtos atualizados automaticamente quando códigos são usados em vendas</p>
+                    <p>✅ Produtos atualizados automaticamente com sistema de contagem por código</p>
                     <p>📱 {movimentacoes.filter(m => m.codigoBarrasUsado).length} movimentações com códigos específicos registradas</p>
                     <p>🕒 Última sincronização: {ultimaSincronizacao.toLocaleTimeString('pt-BR')}</p>
                   </div>
@@ -1338,7 +1396,7 @@ export default function Produtos() {
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 animate-fade-in">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Controle de Produtos</h1>
-                <p className="text-sm text-gray-600 mt-1">Sistema integrado com múltiplos códigos e sincronização automática</p>
+                <p className="text-sm text-gray-600 mt-1">Sistema com contagem inteligente de códigos múltiplos</p>
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                 <LoadingButton
@@ -1377,7 +1435,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Filtros atualizados */}
+          {/* Filtros */}
           {!loadingProdutos && (
             <div className="bg-white p-6 rounded-xl shadow-lg mb-6 animate-fade-in">
               <h3 className="text-lg font-bold text-gray-800 mb-4">🔍 Filtros</h3>
@@ -1433,7 +1491,7 @@ export default function Produtos() {
                     <option value="vencendo_hoje">⏰ Vencendo hoje</option>
                     <option value="vencendo_7_dias">📅 Vencendo em 7 dias</option>
                     <option value="proximo_vencimento">⚠️ Próximo do vencimento</option>
-                    <option value="com_validade">�� Com validade</option>
+                    <option value="com_validade">📅 Com validade</option>
                     <option value="sem_validade">♾️ Sem validade</option>
                   </select>
                 </div>
@@ -1465,20 +1523,16 @@ export default function Produtos() {
                   📊 {produtosFiltrados.length} de {produtos.length} produtos
                 </span>
                 <div className="flex items-center space-x-4 text-sm">
-                  <span className="text-blue-600">📱 {produtos.filter(p => p.codigosBarras?.length > 0).length} com código</span>
+                  <span className="text-blue-600">📱 {produtos.filter(p => p.codigosBarras && Object.keys(p.codigosBarras).length > 0).length} com código</span>
+                  <span className="text-green-600">🔢 {produtos.reduce((total, p) => total + Object.values(p.codigosBarras || {}).reduce((a, b) => a + b, 0), 0)} unidades</span>
                   <span className="text-orange-600">📅 {estatisticasValidade.comValidade} com validade</span>
                   <span className="text-purple-600">🥃 {produtos.filter(p => p.isDestilado).length} destilados</span>
-                  {(estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje) > 0 && (
-                    <span className="text-red-600 font-medium">
-                      �� {estatisticasValidade.vencidos + estatisticasValidade.vencendoHoje} críticos
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* 🆕 FORMULÁRIO ATUALIZADO COM SINCRONIZAÇÃO */}
+          {/* FORMULÁRIO COM GERENCIADOR CORRIGIDO */}
           {showForm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1487,7 +1541,7 @@ export default function Produtos() {
                     {editingId ? '✏️ Editar Produto' : '➕ Novo Produto'}
                     {editingId && movimentacoes && (
                       <span className="text-sm font-normal text-gray-600 block">
-                        🔄 Dados sincronizados com movimentações
+                        🔄 Sistema de contagem de códigos ativo
                       </span>
                     )}
                   </h3>
@@ -1585,7 +1639,7 @@ export default function Produtos() {
                         <span className="text-sm text-purple-800">Categoria selecionada: </span>
                         <span className="font-bold text-purple-900">{formData.categoria}</span>
                         
-                        {/* 🆕 CHECKBOX DESTILADO PARA BEBIDAS */}
+                        {/* Checkbox destilado para bebidas */}
                         {formData.categoria === 'Bebidas' && (
                           <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                             <label className="flex items-center space-x-2 cursor-pointer">
@@ -1696,7 +1750,7 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* 🆕 CONTROLE DE VALIDADE CONDICIONAL */}
+                  {/* Controle de validade */}
                   {formData.categoria && !formData.isDestilado && (
                     <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-5">
                       <div className="flex items-center justify-between mb-4">
@@ -1779,7 +1833,6 @@ export default function Produtos() {
                         </div>
                       )}
 
-                      {/* Info destilado */}
                       {formData.isDestilado && (
                         <div className="mt-3 p-3 bg-blue-100 rounded-lg border border-blue-200">
                           <p className="text-sm text-blue-800">
@@ -1790,10 +1843,10 @@ export default function Produtos() {
                     </div>
                   )}
 
-                  {/* 🆕 GERENCIADOR DE CÓDIGOS DE BARRAS MELHORADO */}
+                  {/* 🆕 GERENCIADOR DE CÓDIGOS CORRIGIDO */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">�� Códigos de Barras</h4>
+                      <h4 className="text-lg font-bold text-gray-900">📱 Códigos de Barras</h4>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1801,7 +1854,7 @@ export default function Produtos() {
                           onChange={(e) => setFormData(prev => ({
                             ...prev,
                             temCodigoBarras: e.target.checked,
-                            codigosBarras: e.target.checked ? prev.codigosBarras : []
+                            codigosBarras: e.target.checked ? prev.codigosBarras : {}  // 🆕 Objeto vazio
                           }))}
                           disabled={loading}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
@@ -1820,7 +1873,7 @@ export default function Produtos() {
                         disabled={loading}
                         onScanear={iniciarScanner}
                         produtoId={editingId || undefined}
-                        ultimasMovimentacoes={movimentacoes || undefined}
+                        ultimasMovimentacoes={movimentacoes || undefined}  // 🆕 CORRIGIDO
                       />
                     ) : (
                       <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -2003,11 +2056,11 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Lista de Produtos Atualizada */}
+          {/* Lista de Produtos */}
           {!loadingProdutos && (
             <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-fade-in">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800">📋 Lista de Produtos</h3>
+                <h3 className="text-lg font-semibold text-gray-800">📋 Lista de Produtos com Contagem</h3>
               </div>
 
               {produtosFiltrados.length === 0 ? (
@@ -2016,7 +2069,7 @@ export default function Produtos() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
                   <p className="text-gray-500 mb-4">
                     {!produtos || produtos.length === 0
-                      ? 'Comece cadastrando seu primeiro produto com múltiplos códigos.'
+                      ? 'Comece cadastrando produtos com sistema de contagem de códigos.'
                       : 'Tente ajustar os filtros para encontrar os produtos desejados.'
                     }
                   </p>
@@ -2037,6 +2090,7 @@ export default function Produtos() {
                       {produtosFiltrados.map((produto) => {
                         const validadeInfo = verificarValidade(produto)
                         const dadosCategoria = obterDadosCategoria(produto)
+                        const totalUnidades = Object.values(produto.codigosBarras || {}).reduce((a, b) => a + b, 0)
                         
                         return (
                           <div key={produto.id} className="p-4 hover:bg-gray-50 transition-colors">
@@ -2068,12 +2122,12 @@ export default function Produtos() {
                                 <div className="space-y-1 text-xs text-gray-600">
                                   <p><span className="font-medium">Categoria:</span> {dadosCategoria.nome}</p>
                                   
-                                  {/* 🆕 CÓDIGOS DE BARRAS MÚLTIPLOS */}
-                                  {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
+                                  {/* 🆕 CÓDIGOS COM CONTAGEM */}
+                                  {Object.keys(produto.codigosBarras || {}).length > 0 ? (
                                     <p>
                                       <span className="font-medium">Códigos:</span> 
                                       <span className="ml-1 text-blue-600">
-                                        {produto.codigosBarras.length} código(s)
+                                        {Object.keys(produto.codigosBarras).length} tipo(s), {totalUnidades} unidades
                                       </span>
                                     </p>
                                   ) : (
@@ -2090,7 +2144,7 @@ export default function Produtos() {
                                   <p><span className="font-medium">Compra:</span> R$ {produto.valorCompra.toFixed(2)}</p>
                                   <p><span className="font-medium">Venda:</span> R$ {produto.valorVenda.toFixed(2)}</p>
                                   
-                                  {/* 🆕 INFORMAÇÕES DE VALIDADE CONDICIONAIS */}
+                                  {/* Informações de validade */}
                                   {produto.isDestilado ? (
                                     <p>
                                       <span className="font-medium">Validade:</span> 
@@ -2112,7 +2166,7 @@ export default function Produtos() {
                                   )}
                                 </div>
 
-                                {/* Status do estoque e validade */}
+                                {/* Status badges */}
                                 <div className="mt-2 flex flex-wrap items-center gap-1">
                                   {produto.estoque === 0 ? (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -2128,10 +2182,10 @@ export default function Produtos() {
                                     </span>
                                   )}
 
-                                  {/* 🆕 BADGE PARA CÓDIGOS */}
-                                  {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
+                                  {/* Badge para códigos */}
+                                  {Object.keys(produto.codigosBarras || {}).length > 0 ? (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                      📱 {produto.codigosBarras.length} código(s)
+                                      📱 {totalUnidades} un.
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
@@ -2139,7 +2193,7 @@ export default function Produtos() {
                                     </span>
                                   )}
 
-                                  {/* 🆕 BADGE DESTILADO */}
+                                  {/* Badge destilado */}
                                   {produto.isDestilado && (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                       🥃 Destilado
@@ -2223,7 +2277,7 @@ export default function Produtos() {
                             Categoria
                           </th>  
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Códigos de Barras
+                            Códigos (Contagem)
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Estoque
@@ -2246,6 +2300,7 @@ export default function Produtos() {
                         {produtosFiltrados.map((produto) => {
                           const validadeInfo = verificarValidade(produto)
                           const dadosCategoria = obterDadosCategoria(produto)
+                          const totalUnidades = Object.values(produto.codigosBarras || {}).reduce((a, b) => a + b, 0)
                           
                           return (
                             <tr key={produto.id} className="hover:bg-gray-50 transition-colors">
@@ -2278,33 +2333,26 @@ export default function Produtos() {
                                 </div>
                               </td>
                               
-                              {/* 🆕 COLUNA CÓDIGOS MÚLTIPLOS ATUALIZADA */}
+                              {/* 🆕 COLUNA CÓDIGOS COM CONTAGEM */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {produto.codigosBarras && produto.codigosBarras.length > 0 ? (
+                                {Object.keys(produto.codigosBarras || {}).length > 0 ? (
                                   <div>
                                     <div className="font-bold text-blue-600 mb-1 flex items-center">
-                                      📱 {produto.codigosBarras.length} código(s)
-                                      {/* 🆕 INDICADOR DE SINCRONIZAÇÃO */}
-                                      {movimentacoes && movimentacoes.some(mov => 
-                                        mov.produtoId === produto.id && 
-                                        mov.tipo === 'saida' && 
-                                        mov.codigoBarrasUsado &&
-                                        new Date(mov.data.split('/').reverse().join('-')) >= new Date(Date.now() - 24*60*60*1000)
-                                      ) && (
-                                        <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-1 py-0.5 rounded">
-                                          🔄 Atualizado
-                                        </span>
-                                      )}
+                                      📱 {Object.keys(produto.codigosBarras).length} código(s)
+                                      <span className="ml-2 text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">
+                                        {totalUnidades} unidades
+                                      </span>
                                     </div>
                                     <div className="space-y-1 max-h-20 overflow-y-auto">
-                                      {produto.codigosBarras.slice(0, 3).map((codigo, index) => (
-                                        <div key={index} className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                                          {codigo}
+                                      {Object.entries(produto.codigosBarras).slice(0, 3).map(([codigo, quantidade]) => (
+                                        <div key={codigo} className="font-mono text-xs bg-gray-100 px-2 py-1 rounded flex justify-between">
+                                          <span>{codigo}</span>
+                                          <span className="font-bold text-blue-600">{quantidade}x</span>
                                         </div>
                                       ))}
-                                      {produto.codigosBarras.length > 3 && (
+                                      {Object.keys(produto.codigosBarras).length > 3 && (
                                         <div className="text-xs text-gray-500">
-                                          +{produto.codigosBarras.length - 3} mais...
+                                          +{Object.keys(produto.codigosBarras).length - 3} códigos mais...
                                         </div>
                                       )}
                                     </div>
@@ -2343,7 +2391,7 @@ export default function Produtos() {
                                 <div>Venda: R$ {produto.valorVenda.toFixed(2)}</div>
                               </td>
                               
-                              {/* 🆕 COLUNA DE VALIDADE CONDICIONAL */}
+                              {/* Coluna de validade */}
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {produto.isDestilado ? (
                                   <div className="text-center">
@@ -2373,7 +2421,7 @@ export default function Produtos() {
                                       )}
                                       {validadeInfo.status === 'vence_em_7_dias' && (
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                          📅 {validadeInfo.textoVencimento}
+                                                                                    📅 {validadeInfo.textoVencimento}
                                         </span>
                                       )}
                                       {validadeInfo.status === 'proximo_vencimento' && (
@@ -2444,20 +2492,20 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Estatísticas finais */}
+          {/* Estatísticas finais atualizadas */}
           {!loadingProdutos && produtos && produtos.length > 0 && (
             <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200 animate-fade-in">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">📊 Resumo dos Produtos</h3>
+              <h3 className="text-lg font-bold text-gray-800 mb-6">📊 Resumo dos Produtos com Contagem</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
                   <div className="text-2xl font-bold text-blue-600">{produtos.filter(p => p.ativo).length}</div>
                   <div className="text-blue-600 text-sm font-medium">Produtos Ativos</div>
                 </div>
 
-                {/* 🆕 ESTATÍSTICA DE CÓDIGOS MÚLTIPLOS */}
+                {/* 🆕 ESTATÍSTICA DE CÓDIGOS COM CONTAGEM */}
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
                   <div className="text-2xl font-bold text-green-600">
-                    {produtos.filter(p => p.codigosBarras && p.codigosBarras.length > 0).length}
+                    {produtos.filter(p => p.codigosBarras && Object.keys(p.codigosBarras).length > 0).length}
                   </div>
                   <div className="text-green-600 text-sm font-medium">Com Códigos</div>
                 </div>
@@ -2485,13 +2533,20 @@ export default function Produtos() {
                 </div>
               </div>
 
-              {/* 🆕 RESUMO DE CÓDIGOS E DESTILADOS */}
+              {/* 🆕 RESUMO DE CÓDIGOS COM CONTAGEM DETALHADA */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
                 <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="text-xl font-bold text-blue-600">
-                    {produtos.reduce((total, p) => total + (p.codigosBarras?.length || 0), 0)}
+                    {produtos.reduce((total, p) => total + Object.values(p.codigosBarras || {}).reduce((a, b) => a + b, 0), 0)}
                   </div>
-                  <div className="text-blue-600 text-sm font-medium">Total de Códigos</div>
+                  <div className="text-blue-600 text-sm font-medium">Total de Unidades</div>
+                </div>
+
+                <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-xl font-bold text-green-600">
+                    {produtos.reduce((total, p) => total + Object.keys(p.codigosBarras || {}).length, 0)}
+                  </div>
+                  <div className="text-green-600 text-sm font-medium">Códigos Únicos</div>
                 </div>
 
                 <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
@@ -2507,15 +2562,33 @@ export default function Produtos() {
                   </div>
                   <div className="text-gray-600 text-sm font-medium">Sem Código</div>
                 </div>
-
-                {/* 🆕 ESTATÍSTICA DE SINCRONIZAÇÃO */}
-                <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="text-xl font-bold text-green-600">
-                    {movimentacoes ? movimentacoes.filter(m => m.codigoBarrasUsado).length : 0}
-                  </div>
-                  <div className="text-green-600 text-sm font-medium">Códigos Utilizados</div>
-                </div>
               </div>
+
+              {/* 🆕 ESTATÍSTICA DE SINCRONIZAÇÃO COM MOVIMENTAÇÕES */}
+              {movimentacoes && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-green-600">
+                      {movimentacoes.filter(m => m.codigoBarrasUsado).length}
+                    </div>
+                    <div className="text-green-600 text-sm font-medium">Códigos Utilizados</div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-blue-600">
+                      {movimentacoes.filter(m => m.tipo === 'entrada' && m.codigoBarrasUsado).length}
+                    </div>
+                    <div className="text-blue-600 text-sm font-medium">Entradas com Código</div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="text-xl font-bold text-red-600">
+                      {movimentacoes.filter(m => m.tipo === 'saida' && m.codigoBarrasUsado).length}
+                    </div>
+                    <div className="text-red-600 text-sm font-medium">Saídas com Código</div>
+                  </div>
+                </div>
+              )}
 
               {/* Alertas de validade no resumo */}
               {(estatisticasValidade.vencidos > 0 || estatisticasValidade.vencendoHoje > 0 || estatisticasValidade.vencendoEm7Dias > 0) && (
@@ -2543,7 +2616,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA TOTALMENTE INTEGRADO */}
+          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA COMPLETAMENTE INTEGRADO */}
           <div className="mt-6 bg-green-50 border-2 border-green-200 rounded-xl p-6 animate-fade-in">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -2551,21 +2624,21 @@ export default function Produtos() {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-green-800 mb-2">
-                  Sistema Completo: Produtos ↔ Movimentações ↔ PDV
+                  Sistema Avançado: Contagem Inteligente de Códigos
                 </h3>
                 <div className="text-sm text-green-700 space-y-2">
-                  <p>• <strong>🔄 Sincronização em tempo real:</strong> Produtos atualizam automaticamente quando códigos são usados</p>
-                  <p>• <strong>🏷️ Múltiplos códigos por produto:</strong> Cadastre vários códigos para o mesmo item</p>
-                  <p>• <strong>📋 Replicação inteligente:</strong> Clone códigos iguais para múltiplas unidades</p>
-                  <p>• <strong>🗑️ Remoção automática:</strong> Códigos usados em vendas são removidos automaticamente do produto</p>
-                  <p>• <strong>🥃 Destilados sem validade:</strong> Bebidas destiladas automaticamente sem data de vencimento</p>
-                  <p>• <strong>📝 Produtos sem código:</strong> Para itens avulsos como balas soltas, cigarros avulsos</p>
-                  <p>• <strong>📱 Scanner integrado:</strong> Use a câmera para escanear códigos diretamente</p>
-                  <p>• <strong>✅ Validação inteligente:</strong> Sistema impede códigos duplicados entre produtos</p>
-                  <p>• <strong>🎨 Visual por categoria:</strong> Cores e ícones para fácil identificação</p>
-                  <p>• <strong>📊 Controle de validade condicional:</strong> Apenas produtos que realmente precisam</p>
-                  <p>• <strong>🔔 Alertas visuais:</strong> Indicadores quando códigos foram removidos por vendas</p>
-                  <p>• <strong>⚡ Refresh automático:</strong> Dados sempre atualizados entre todas as telas</p>
+                  <p>• <strong>🔢 Contagem por código:</strong> Cada código registra quantas unidades existem</p>
+                  <p>• <strong>📱 Scanner integrado:</strong> Adicione códigos diretamente com câmera ou digitação</p>
+                  <p>• <strong>➕/➖ Controle granular:</strong> Ajuste quantidades individualmente por código</p>
+                  <p>• <strong>🔄 Sincronização automática:</strong> Movimentações atualizam contagens em tempo real</p>
+                  <p>• <strong>🛒 Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
+                  <p>• <strong>📊 Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
+                  <p>• <strong>🥃 Destilados inteligentes:</strong> Bebidas destiladas automaticamente sem validade</p>
+                  <p>• <strong>📝 Produtos sem código:</strong> Suporte a itens avulsos e personalizados</p>
+                  <p>• <strong>🎨 Interface visual:</strong> Cores por categoria e indicadores claros</p>
+                  <p>• <strong>✅ Validação robusta:</strong> Impede códigos duplicados entre produtos</p>
+                  <p>• <strong>⚡ Performance otimizada:</strong> Sistema eficiente para grandes volumes</p>
+                  <p>• <strong>🔔 Alertas inteligentes:</strong> Notificações quando códigos são utilizados</p>
                 </div>
               </div>
             </div>

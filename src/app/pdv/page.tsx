@@ -1,4 +1,4 @@
-// src/app/pdv/page.tsx
+// src/app/pdv/page.tsx - VERSÃO FINAL CORRIGIDA COM SISTEMA DE CONTAGEM
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,16 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// 📦 INTERFACE PRODUTO ATUALIZADA
+// �� INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
   categoriaId?: string
-  codigosBarras: string[]      // 🆕 Array de códigos
-  temCodigoBarras: boolean     // 🆕 Controle se usa código
-  isDestilado: boolean         // 🆕 Bebida sem validade
+  codigosBarras: Record<string, number>  // 🆕 CORRIGIDO: Objeto com código: quantidade
+  temCodigoBarras: boolean
+  isDestilado: boolean
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -82,7 +82,7 @@ interface Movimentacao {
   hora: string
   observacao: string
   userId: string
-  codigoBarrasUsado?: string   // 🆕 Código específico usado
+  codigoBarrasUsado?: string
   clienteId?: string
   clienteNome?: string
   clienteCpfCnpj?: string
@@ -213,7 +213,7 @@ export default function PDV() {
     }
   }, [categorias])
 
-  // 🆕 PRODUTOS FILTRADOS POR CATEGORIA E BUSCA
+  // 🆕 PRODUTOS FILTRADOS COM CONTAGEM
   const produtosFiltrados = useMemo(() => {
     if (!produtos) return []
     
@@ -235,7 +235,11 @@ export default function PDV() {
       produtosFiltrados = produtosFiltrados.filter(p =>
         p.nome.toLowerCase().includes(termo) ||
         p.codigo.toLowerCase().includes(termo) ||
-        p.categoria.toLowerCase().includes(termo)
+        p.categoria.toLowerCase().includes(termo) ||
+        // 🆕 BUSCAR POR CÓDIGOS COM CONTAGEM
+        Object.keys(p.codigosBarras || {}).some(codigo => 
+          codigo.toLowerCase().includes(termo)
+        )
       )
     }
     
@@ -334,19 +338,30 @@ export default function PDV() {
 
   // Produtos ativos
   const produtosAtivos = produtos ? produtos.filter(p => p.ativo) : []
-  const produtosComCodigoBarras = produtosAtivos.filter(p => p.temCodigoBarras && p.codigosBarras.length > 0)
+  const produtosComCodigoBarras = produtosAtivos.filter(p => p.temCodigoBarras && Object.keys(p.codigosBarras || {}).length > 0)
 
-  // 🆕 BUSCAR PRODUTO POR CÓDIGO DE BARRAS ATUALIZADA
+  // 🆕 BUSCAR PRODUTO POR CÓDIGO COM CONTAGEM
   const buscarProdutoPorCodigoBarras = (codigoBarras: string) => {
     const produtoEncontrado = produtosAtivos.find(p => 
-      p.codigosBarras?.includes(codigoBarras) || 
+      Object.keys(p.codigosBarras || {}).includes(codigoBarras) || 
       p.codigo === codigoBarras
     )
     
-    return produtoEncontrado ? {
+    if (!produtoEncontrado) return null
+    
+    // Verificar se há unidades disponíveis deste código específico
+    if (Object.keys(produtoEncontrado.codigosBarras || {}).includes(codigoBarras)) {
+      const quantidadeDisponivel = produtoEncontrado.codigosBarras[codigoBarras] || 0
+      if (quantidadeDisponivel <= 0) {
+        return null // Código existe mas não há unidades disponíveis
+      }
+    }
+    
+    return {
       produto: produtoEncontrado,
-      codigoUsado: produtoEncontrado.codigosBarras?.includes(codigoBarras) ? codigoBarras : produtoEncontrado.codigo
-    } : null
+      codigoUsado: Object.keys(produtoEncontrado.codigosBarras || {}).includes(codigoBarras) ? codigoBarras : produtoEncontrado.codigo,
+      quantidadeDisponivel: produtoEncontrado.codigosBarras[codigoBarras] || produtoEncontrado.estoque
+    }
   }
 
   // Função para selecionar categoria
@@ -362,8 +377,17 @@ export default function PDV() {
     }
   }
 
-  // 🆕 FUNÇÃO PARA ADICIONAR PRODUTO DA LISTA ATUALIZADA
+  // 🆕 FUNÇÃO PARA ADICIONAR PRODUTO COM VALIDAÇÃO DE CONTAGEM
   const adicionarProdutoDaLista = async (produto: Produto, codigoEspecifico?: string) => {
+    // 🆕 VALIDAR QUANTIDADE DISPONÍVEL POR CÓDIGO
+    if (codigoEspecifico && produto.codigosBarras) {
+      const quantidadeDisponivel = produto.codigosBarras[codigoEspecifico] || 0
+      if (quantidadeDisponivel <= 0) {
+        toast.error('Código indisponível', `Código ${codigoEspecifico} não possui unidades disponíveis`)
+        return
+      }
+    }
+    
     await adicionarProdutoVenda(produto, 1, codigoEspecifico)
     
     if (!vendaAtiva) {
@@ -397,7 +421,7 @@ export default function PDV() {
       codigo: `TEMP${Date.now()}`,
       nome: produtoSemCodigoNome,
       categoria: 'Produtos Avulsos',
-      codigosBarras: [],
+      codigosBarras: {},  // 🆕 Objeto vazio
       temCodigoBarras: false,
       isDestilado: false,
       estoqueMinimo: 0,
@@ -516,12 +540,23 @@ export default function PDV() {
     toast.info('Cliente removido', 'Desconto de cliente removido')
   }, [formaPagamento, toast])
 
-  // 🆕 ADICIONAR PRODUTO À VENDA ATUALIZADA
+  // 🆕 ADICIONAR PRODUTO À VENDA COM VALIDAÇÃO DE CONTAGEM
   const adicionarProdutoVenda = async (produto: Produto, quantidade: number = 1, codigoBarrasUsado?: string) => {
+    // 🆕 VALIDAR ESTOQUE GERAL
     if (produto.estoque < quantidade && produto.id.indexOf('temp_') !== 0) {
       playSound('error')
       toast.error('Estoque insuficiente', `Disponível: ${produto.estoque} unidades`)
       return
+    }
+
+    // 🆕 VALIDAR QUANTIDADE DISPONÍVEL DO CÓDIGO ESPECÍFICO
+    if (codigoBarrasUsado && codigoBarrasUsado !== 'PRODUTO_AVULSO' && produto.codigosBarras) {
+      const quantidadeDisponivel = produto.codigosBarras[codigoBarrasUsado] || 0
+      if (quantidadeDisponivel < quantidade) {
+        playSound('error')
+        toast.error('Código insuficiente', `Código ${codigoBarrasUsado} tem apenas ${quantidadeDisponivel} unidade(s) disponível(eis)`)
+        return
+      }
     }
 
     const itemExistente = itensVenda.find(item => 
@@ -531,10 +566,22 @@ export default function PDV() {
     
     if (itemExistente && produto.id.indexOf('temp_') !== 0) {
       const novaQuantidade = itemExistente.quantidade + quantidade
+      
+      // 🆕 VALIDAR NOVA QUANTIDADE TOTAL
       if (produto.estoque < novaQuantidade) {
         playSound('error')
         toast.error('Estoque insuficiente', `Disponível: ${produto.estoque} unidades`)
         return
+      }
+      
+      // 🆕 VALIDAR CÓDIGO ESPECÍFICO PARA NOVA QUANTIDADE
+      if (codigoBarrasUsado && codigoBarrasUsado !== 'PRODUTO_AVULSO' && produto.codigosBarras) {
+        const quantidadeDisponivel = produto.codigosBarras[codigoBarrasUsado] || 0
+        if (quantidadeDisponivel < novaQuantidade) {
+          playSound('error')
+          toast.error('Código insuficiente', `Código ${codigoBarrasUsado} tem apenas ${quantidadeDisponivel} unidade(s) disponível(eis)`)
+          return
+        }
       }
       
       setItensVenda(itensVenda.map(item => 
@@ -559,10 +606,10 @@ export default function PDV() {
     }
 
     playSound('success')
-    toast.success('Produto adicionado!', `${produto.nome} - ${quantidade}x`)
+    toast.success('Produto adicionado!', `${produto.nome} - ${quantidade}x${codigoBarrasUsado && codigoBarrasUsado !== 'PRODUTO_AVULSO' ? ` (${codigoBarrasUsado})` : ''}`)
   }
 
-  // 🆕 PROCESSAR CÓDIGO DE BARRAS ATUALIZADA
+  // 🆕 PROCESSAR CÓDIGO DE BARRAS COM CONTAGEM
   const processarCodigoBarras = async (codigoBarras: string) => {
     if (!codigoBarras.trim()) return
 
@@ -574,6 +621,12 @@ export default function PDV() {
       
       if (resultado) {
         playSound('scan')
+        
+        // 🆕 MOSTRAR QUANTIDADE DISPONÍVEL DO CÓDIGO
+        if (resultado.codigoUsado !== resultado.produto.codigo) {
+          toast.success('Código encontrado!', `${resultado.produto.nome} - ${resultado.quantidadeDisponivel} unidades disponíveis`)
+        }
+        
         await adicionarProdutoVenda(resultado.produto, 1, resultado.codigoUsado)
         setCodigoBarrasInput('')
         
@@ -586,7 +639,7 @@ export default function PDV() {
         }
       } else {
         playSound('error')
-        toast.error('Produto não encontrado', 'Código de barras não cadastrado')
+        toast.error('Produto não encontrado', 'Código de barras não cadastrado ou sem unidades disponíveis')
         setCodigoBarrasInput('')
       }
     } finally {
@@ -614,7 +667,7 @@ export default function PDV() {
     
     if (novoEstado) {
       playSound('success')
-      toast.success('🔥 Venda iniciada!', 'Escaneie produtos continuamente (F1 para pausar)')
+      toast.success('🔥 Venda iniciada!', 'Sistema com contagem de códigos ativo! (F1 para pausar)')
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus()
@@ -633,7 +686,7 @@ export default function PDV() {
     toast.info('Item removido', 'Produto removido da venda')
   }
 
-  // Alterar quantidade do item
+  // 🆕 ALTERAR QUANTIDADE COM VALIDAÇÃO DE CONTAGEM
   const alterarQuantidadeItem = (produtoId: string, novaQuantidade: number, codigoBarrasUsado?: string) => {
     if (novaQuantidade <= 0) {
       removerItemVenda(produtoId, codigoBarrasUsado)
@@ -645,9 +698,19 @@ export default function PDV() {
     )
     if (!item) return
 
+    // 🆕 VALIDAR ESTOQUE GERAL
     if (item.produto.id.indexOf('temp_') !== 0 && item.produto.estoque < novaQuantidade) {
       toast.error('Estoque insuficiente', `Disponível: ${item.produto.estoque} unidades`)
       return
+    }
+
+    // 🆕 VALIDAR QUANTIDADE DO CÓDIGO ESPECÍFICO
+    if (codigoBarrasUsado && codigoBarrasUsado !== 'PRODUTO_AVULSO' && item.produto.codigosBarras) {
+      const quantidadeDisponivel = item.produto.codigosBarras[codigoBarrasUsado] || 0
+      if (quantidadeDisponivel < novaQuantidade) {
+        toast.error('Código insuficiente', `Código ${codigoBarrasUsado} tem apenas ${quantidadeDisponivel} unidade(s) disponível(eis)`)
+        return
+      }
     }
 
     setItensVenda(itensVenda.map(item => 
@@ -674,185 +737,213 @@ export default function PDV() {
     ))
   }
 
-  // 🔧 FINALIZAR VENDA CORRIGIDA - SEM CAMPOS UNDEFINED
+  // 🆕 FINALIZAR VENDA COM SISTEMA DE CONTAGEM
   const finalizarVenda = async () => {
-  if (!user) {
-    toast.error('Erro de autenticação', 'Usuário não encontrado!')
-    return
-  }
-
-  if (itensVenda.length === 0) {
-    toast.warning('Venda vazia', 'Adicione produtos à venda!')
-    return
-  }
-
-  if (formaPagamento === 'dinheiro' && valorPago < totaisVenda.total) {
-    toast.warning('Valor insuficiente', 'Valor pago menor que o total da venda')
-    return
-  }
-
-  if (formaPagamento === 'prazo' && !clienteSelecionado) {
-    toast.warning('Cliente obrigatório', 'Selecione um cliente para venda a prazo')
-    return
-  }
-
-  if (limiteExcedido) {
-    toast.error('Limite excedido', 'Valor da venda excede o limite de crédito do cliente')
-    return
-  }
-
-  setLoading(true)
-  try {
-    const totalVenda = calcularTotalVenda()
-    const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
-    const valorDesconto = obterValorDesconto()
-
-    // 🆕 CRIAR MOVIMENTAÇÕES SEM CAMPOS UNDEFINED
-    const movimentacoesPromises = itensVenda.map(item => {
-      let observacao = vendaAtiva 
-        ? `Venda PDV - Modo Ativo` 
-        : `Venda PDV`
-      
-      if (clienteSelecionado) observacao += ` - Cliente: ${clienteSelecionado.nome}`
-      if (valorDesconto > 0) {
-        observacao += ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${descontoTotal.toFixed(2)}`}`
-      }
-
-      // Adicionar informação do código usado
-      if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
-        observacao += ` - Código: ${item.codigoBarrasUsado}`
-      } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
-        observacao += ` - Produto Avulso`
-      }
-
-      // 🔧 CAMPOS OBRIGATÓRIOS DA MOVIMENTAÇÃO
-      const movimentacaoBase = {
-        produto: item.produto.nome,
-        codigo: item.produto.codigo,
-        produtoId: item.produto.id,
-        tipo: 'saida' as const,
-        quantidade: item.quantidade,
-        valorUnitario: item.valorUnitario,
-        valorTotal: item.valorTotal,
-        data: new Date().toLocaleDateString('pt-BR'),
-        hora: new Date().toLocaleTimeString('pt-BR', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        observacao,
-        userId: user.uid,
-        formaPagamento,
-        valorPago: formaPagamento === 'dinheiro' ? valorPago : totalVenda,
-        troco: totaisVenda.troco
-      }
-
-      // 🔧 CAMPOS OPCIONAIS - SÓ ADICIONAR SE TIVEREM VALOR
-      const camposOpcionais: Partial<Movimentacao> = {}
-
-      // Código de barras usado
-      if (item.codigoBarrasUsado && item.codigoBarrasUsado.trim() !== '') {
-        camposOpcionais.codigoBarrasUsado = item.codigoBarrasUsado
-      }
-
-      // Dados do cliente (só se cliente estiver selecionado)
-      if (clienteSelecionado) {
-        camposOpcionais.clienteId = clienteSelecionado.id
-        camposOpcionais.clienteNome = clienteSelecionado.nome
-        camposOpcionais.clienteCpfCnpj = clienteSelecionado.cpfCnpj
-      }
-
-      // 🔧 COMBINAR E FILTRAR UNDEFINED
-      const movimentacaoCompleta = { ...movimentacaoBase, ...camposOpcionais }
-
-      // 🚀 FILTRO FINAL - REMOVER QUALQUER UNDEFINED
-      const movimentacaoLimpa = Object.fromEntries(
-        Object.entries(movimentacaoCompleta).filter(([_, value]) => value !== undefined)
-      ) as Omit<Movimentacao, 'id'>
-
-      console.log('Movimentação a ser salva:', movimentacaoLimpa) // Debug
-
-      return addMovimentacao(movimentacaoLimpa)
-    })
-
-    // Atualizar estoque apenas para produtos reais
-    const estoquePromises = itensVenda
-      .filter(item => item.produto.id.indexOf('temp_') !== 0)
-      .map(item => {
-        const novoEstoque = item.produto.estoque - item.quantidade
-        return updateProduto(item.produto.id, { 
-          ...item.produto, 
-          estoque: novoEstoque 
-        })
-      })
-
-    await Promise.all([...movimentacoesPromises, ...estoquePromises])
-
-    setVendasDoDia(prev => prev + 1)
-    setFaturamentoDoDia(prev => prev + totalVenda)
-
-    imprimirCupom()
-    limparVenda(true)
-    setModalPagamentoAberto(false)
-
-    playSound('success')
-    
-    const mensagemDesconto = valorDesconto > 0 
-      ? ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${valorDesconto.toFixed(2)}`}`
-      : ''
-    
-    toast.success(
-      '💰 Venda finalizada!', 
-      `Total: R$ ${totalVenda.toFixed(2)} - ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}${clienteSelecionado ? ` - ${clienteSelecionado.nome}` : ''}${mensagemDesconto}`
-    )
-
-    if (vendaAtiva) {
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
-        }
-      }, 100)
+    if (!user) {
+      toast.error('Erro de autenticação', 'Usuário não encontrado!')
+      return
     }
 
-  } catch (error) {
-    console.error('Erro ao finalizar venda:', error)
-    toast.error('Erro na venda', 'Não foi possível finalizar a venda')
-  } finally {
-    setLoading(false)
+    if (itensVenda.length === 0) {
+      toast.warning('Venda vazia', 'Adicione produtos à venda!')
+      return
+    }
+
+    if (formaPagamento === 'dinheiro' && valorPago < totaisVenda.total) {
+      toast.warning('Valor insuficiente', 'Valor pago menor que o total da venda')
+      return
+    }
+
+    if (formaPagamento === 'prazo' && !clienteSelecionado) {
+      toast.warning('Cliente obrigatório', 'Selecione um cliente para venda a prazo')
+      return
+    }
+
+    if (limiteExcedido) {
+      toast.error('Limite excedido', 'Valor da venda excede o limite de crédito do cliente')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const totalVenda = calcularTotalVenda()
+      const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
+      const valorDesconto = obterValorDesconto()
+
+      // �� CRIAR MOVIMENTAÇÕES COM SISTEMA DE CONTAGEM
+      const movimentacoesPromises = itensVenda.map(item => {
+        let observacao = vendaAtiva 
+          ? `Venda PDV - Modo Ativo` 
+          : `Venda PDV`
+        
+        if (clienteSelecionado) observacao += ` - Cliente: ${clienteSelecionado.nome}`
+        if (valorDesconto > 0) {
+          observacao += ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${descontoTotal.toFixed(2)}`}`
+        }
+
+        // Adicionar informação do código usado
+        if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
+          observacao += ` - Código: ${item.codigoBarrasUsado}`
+        } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
+          observacao += ` - Produto Avulso`
+        }
+
+        // 🔧 CAMPOS OBRIGATÓRIOS DA MOVIMENTAÇÃO
+        const movimentacaoBase = {
+          produto: item.produto.nome,
+          codigo: item.produto.codigo,
+          produtoId: item.produto.id,
+          tipo: 'saida' as const,
+          quantidade: item.quantidade,
+          valorUnitario: item.valorUnitario,
+          valorTotal: item.valorTotal,
+          data: new Date().toLocaleDateString('pt-BR'),
+          hora: new Date().toLocaleTimeString('pt-BR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          observacao,
+          userId: user.uid,
+          formaPagamento,
+          valorPago: formaPagamento === 'dinheiro' ? valorPago : totalVenda,
+          troco: totaisVenda.troco
+        }
+
+        // 🔧 CAMPOS OPCIONAIS - SÓ ADICIONAR SE TIVEREM VALOR
+        const camposOpcionais: Partial<Movimentacao> = {}
+
+        // Código de barras usado
+        if (item.codigoBarrasUsado && item.codigoBarrasUsado.trim() !== '') {
+          camposOpcionais.codigoBarrasUsado = item.codigoBarrasUsado
+        }
+
+        // Dados do cliente (só se cliente estiver selecionado)
+        if (clienteSelecionado) {
+          camposOpcionais.clienteId = clienteSelecionado.id
+          camposOpcionais.clienteNome = clienteSelecionado.nome
+          camposOpcionais.clienteCpfCnpj = clienteSelecionado.cpfCnpj
+        }
+
+        // 🔧 COMBINAR E FILTRAR UNDEFINED
+        const movimentacaoCompleta = { ...movimentacaoBase, ...camposOpcionais }
+
+        // 🚀 FILTRO FINAL - REMOVER QUALQUER UNDEFINED
+        const movimentacaoLimpa = Object.fromEntries(
+          Object.entries(movimentacaoCompleta).filter(([_, value]) => value !== undefined)
+        ) as Omit<Movimentacao, 'id'>
+
+        console.log('Movimentação PDV a ser salva:', movimentacaoLimpa) // Debug
+
+        return addMovimentacao(movimentacaoLimpa)
+      })
+
+      // 🆕 ATUALIZAR ESTOQUE E CÓDIGOS COM SISTEMA DE CONTAGEM
+      const estoquePromises = itensVenda
+        .filter(item => item.produto.id.indexOf('temp_') !== 0)
+        .map(item => {
+          const novoEstoque = item.produto.estoque - item.quantidade
+          
+          // 🆕 ATUALIZAR CÓDIGOS COM CONTAGEM
+          let codigosAtualizados = { ...item.produto.codigosBarras }
+          
+          // Se foi usado um código específico, decrementar sua contagem
+          if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO' && codigosAtualizados[item.codigoBarrasUsado]) {
+            const novaQuantidadeCodigo = codigosAtualizados[item.codigoBarrasUsado] - item.quantidade
+            
+            if (novaQuantidadeCodigo <= 0) {
+              // Remover código se chegou a 0
+              delete codigosAtualizados[item.codigoBarrasUsado]
+            } else {
+              // Decrementar quantidade
+              codigosAtualizados[item.codigoBarrasUsado] = novaQuantidadeCodigo
+            }
+          }
+          
+          // Se não sobrou nenhum código, marcar como sem código
+          const temCodigoBarras = Object.keys(codigosAtualizados).length > 0
+          
+          console.log(`PDV - Produto ${item.produto.nome}:`)
+          console.log(`- Código usado: ${item.codigoBarrasUsado}`)
+          console.log(`- Quantidade vendida: ${item.quantidade}`)
+          console.log(`- Códigos antes:`, item.produto.codigosBarras)
+          console.log(`- Códigos depois:`, codigosAtualizados)
+          
+          return updateProduto(item.produto.id, { 
+            ...item.produto, 
+            estoque: novoEstoque,
+            codigosBarras: codigosAtualizados,
+            temCodigoBarras
+          })
+        })
+
+      await Promise.all([...movimentacoesPromises, ...estoquePromises])
+
+      setVendasDoDia(prev => prev + 1)
+      setFaturamentoDoDia(prev => prev + totalVenda)
+
+      imprimirCupom()
+      limparVenda(true)
+      setModalPagamentoAberto(false)
+
+      playSound('success')
+      
+      const mensagemDesconto = valorDesconto > 0 
+        ? ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${valorDesconto.toFixed(2)}`}`
+        : ''
+      
+      toast.success(
+        '💰 Venda finalizada!', 
+        `Total: R$ ${totalVenda.toFixed(2)} - ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}${clienteSelecionado ? ` - ${clienteSelecionado.nome}` : ''}${mensagemDesconto}`
+      )
+
+      if (vendaAtiva) {
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus()
+          }
+        }, 100)
+      }
+
+    } catch (error) {
+      console.error('Erro ao finalizar venda:', error)
+      toast.error('Erro na venda', 'Não foi possível finalizar a venda')
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   // 🔧 LIMPAR VENDA ATUALIZADA - COM PARÂMETRO OPCIONAL
   const limparVenda = (semConfirmacao: boolean = false) => {
-  if (itensVenda.length === 0) return
-  
-  // 🆕 SÓ MOSTRAR CONFIRMAÇÃO SE NÃO FOR AUTOMÁTICO
-  if (!semConfirmacao && !confirm('Tem certeza que deseja limpar a venda?')) {
-    return
-  }
-  
-  setItensVenda([])
-  setDescontoTotal(0)
-  setDescontoPercentual(0)
-  setTipoDesconto('percentual')
-  setClienteSelecionado(null)
-  setBuscarCliente('')
-  setFormaPagamento('dinheiro')
-  setValorPago(0)
-  setMostrarProdutos(false)
-  setMostrarProdutosSemCodigo(false)
-  setCategoriaSelecionada('')
-  setBuscaProduto('')
-  
-  if (!semConfirmacao) {
-    toast.info('🧹 Venda limpa', 'Todos os itens foram removidos')
-  }
-  
-  setTimeout(() => {
-    if (inputRef.current) {
-      inputRef.current.focus()
+    if (itensVenda.length === 0) return
+    
+    // 🆕 SÓ MOSTRAR CONFIRMAÇÃO SE NÃO FOR AUTOMÁTICO
+    if (!semConfirmacao && !confirm('Tem certeza que deseja limpar a venda?')) {
+      return
     }
-  }, 100)
-}
+    
+    setItensVenda([])
+    setDescontoTotal(0)
+    setDescontoPercentual(0)
+    setTipoDesconto('percentual')
+    setClienteSelecionado(null)
+    setBuscarCliente('')
+    setFormaPagamento('dinheiro')
+    setValorPago(0)
+    setMostrarProdutos(false)
+    setMostrarProdutosSemCodigo(false)
+    setCategoriaSelecionada('')
+    setBuscaProduto('')
+    
+    if (!semConfirmacao) {
+      toast.info('🧹 Venda limpa', 'Todos os itens foram removidos')
+    }
+    
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus()
+      }
+    }, 100)
+  }
 
   // Iniciar scanner
   const iniciarScanner = async () => {
@@ -864,7 +955,7 @@ export default function PDV() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         setShowScanner(true)
-        toast.info('📷 Scanner ativo', 'Aponte a câmera para o código de barras')
+        toast.info('📷 Scanner ativo', 'Sistema com contagem de códigos ativo!')
       }
     } catch (error) {
       console.error('Erro ao acessar câmera:', error)
@@ -887,7 +978,7 @@ export default function PDV() {
     }, 100)
   }
 
-  // 🆕 SIMULAR LEITURA ATUALIZADA
+  // 🆕 SIMULAR LEITURA COM CONTAGEM
   const simularLeituraCodigoBarras = () => {
     if (produtosComCodigoBarras.length === 0) {
       toast.warning('Nenhum produto', 'Cadastre produtos com código de barras primeiro')
@@ -895,12 +986,16 @@ export default function PDV() {
     }
 
     const produtoAleatorio = produtosComCodigoBarras[Math.floor(Math.random() * produtosComCodigoBarras.length)]
-    const codigoAleatorio = produtoAleatorio.codigosBarras[0] || produtoAleatorio.codigo
+    const codigosDisponiveis = Object.keys(produtoAleatorio.codigosBarras || {})
+    const codigoAleatorio = codigosDisponiveis.length > 0 
+      ? codigosDisponiveis[Math.floor(Math.random() * codigosDisponiveis.length)]
+      : produtoAleatorio.codigo
+      
     processarCodigoBarras(codigoAleatorio)
     pararScanner()
   }
 
-  // 🆕 IMPRIMIR CUPOM ATUALIZADO
+  // 🆕 IMPRIMIR CUPOM COM CONTAGEM
   const imprimirCupom = () => {
     const valorDesconto = obterValorDesconto()
     const cupom = `
@@ -933,6 +1028,7 @@ export default function PDV() {
       ${formaPagamento === 'dinheiro' ? `VALOR PAGO: R$ ${valorPago.toFixed(2)}` : ''}
       ${totaisVenda.troco > 0 ? `TROCO: R$ ${totaisVenda.troco.toFixed(2)}` : ''}
       
+      === PDV PRO - CONTAGEM DE CÓDIGOS ===
       ===== OBRIGADO PELA PREFERÊNCIA =====
     `
     
@@ -966,26 +1062,26 @@ export default function PDV() {
                   </div>
                 </div>
                 <p className={`font-bold text-lg ${modoNoturno ? 'text-white' : 'text-gray-700'}`}>Carregando PDV...</p>
-                <p className={`text-sm mt-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>Sincronizando dados do Firebase</p>
+                <p className={`text-sm mt-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>Sistema de contagem de códigos integrado</p>
               </div>
             </div>
           )}
 
           {!loadingProdutos && !loadingClientes && !loadingCategorias && (
             <>
-              {/* 🆕 HEADER DO PDV ATUALIZADO */}
+              {/* 🆕 HEADER DO PDV COM CONTAGEM */}
               <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-xl shadow-xl p-6 mb-6 text-white animate-fade-in">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
                   <div>
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">🛒 PDV Pro + Múltiplos Códigos</h1>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">🛒 PDV Pro - Sistema de Contagem</h1>
                     <p className="text-green-100 mt-2 text-base sm:text-lg">
                       {vendaAtiva 
-                        ? '🔥 Modo Venda Ativa - Escaneie produtos continuamente' 
+                        ? '🔥 Modo Venda Ativa - Sistema de contagem inteligente ativo!' 
                         : mostrarProdutos
                           ? `📂 Categoria: ${categorias?.find(c => c.id === categoriaSelecionada)?.nome || 'Produtos'}`
                           : mostrarProdutosSemCodigo
                             ? '📝 Produtos Sem Código - Adicione rapidamente'
-                            : 'Escaneie códigos, filtre por categoria ou adicione produtos avulsos'
+                            : 'Sistema avançado com contagem de códigos e produtos avulsos'
                       }
                     </p>
                     <div className="mt-2 text-sm text-green-200">
@@ -1029,14 +1125,15 @@ export default function PDV() {
                   <div className="flex items-center">
                     <div className="animate-pulse w-4 h-4 bg-green-500 rounded-full mr-4"></div>
                     <div className="flex-1">
-                      <h3 className="text-green-800 font-bold text-xl">🔥 VENDA ATIVA</h3>
+                      <h3 className="text-green-800 font-bold text-xl">🔥 VENDA ATIVA - SISTEMA DE CONTAGEM</h3>
                       <p className="text-green-700 mt-1">
-                        Escaneie produtos continuamente. Sistema com múltiplos códigos e produtos avulsos!
+                        Sistema inteligente ativo! Códigos são decrementados automaticamente por unidade.
                       </p>
                       <div className="mt-3 text-sm text-green-600 space-y-1">
-                        <p>• ✅ Múltiplos códigos de barras por produto suportados</p>
-                        <p>• 📝 Use F10 para adicionar produtos sem código rapidamente</p>
-                        <p>• 🔄 Controle automático de qual código foi usado na venda</p>
+                        <p>• ✅ Sistema de contagem: cada código registra quantas unidades existem</p>
+                        <p>• 📱 Validação automática: verifica disponibilidade antes de adicionar</p>
+                        <p>• 🔄 Decremento inteligente: remove apenas 1 unidade do código específico</p>
+                        <p>• 📝 Use F10 para produtos sem código | F5-F9 para categorias</p>
                       </div>
                     </div>
                   </div>
@@ -1055,7 +1152,7 @@ export default function PDV() {
                         Nenhum produto ativo encontrado
                       </h3>
                       <div className={`mt-2 text-sm ${modoNoturno ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                        <p>Para usar o PDV, você precisa ter produtos ativos cadastrados.</p>
+                        <p>Para usar o PDV com sistema de contagem, você precisa ter produtos ativos cadastrados.</p>
                       </div>
                       <div className="mt-4">
                         <LoadingButton
@@ -1073,7 +1170,7 @@ export default function PDV() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* 🆕 COLUNA 1: SCANNER E FILTROS ATUALIZADOS */}
+                {/* 🆕 COLUNA 1: SCANNER E FILTROS COM CONTAGEM */}
                 <div className="lg:col-span-1 space-y-6">
                   
                   {/* 🆕 SEÇÃO PRODUTOS SEM CÓDIGO */}
@@ -1295,11 +1392,11 @@ export default function PDV() {
                     </div>
                   )}
 
-                  {/* Busca rápida de produtos */}
+                  {/* 🆕 BUSCA RÁPIDA COM CONTAGEM DE CÓDIGOS */}
                   {(mostrarProdutos || buscaProduto) && !vendaAtiva && (
                     <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                       <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                        🔍 Busca Rápida
+                        🔍 Busca Rápida com Contagem
                       </h3>
                       
                       <div className="mb-4">
@@ -1327,6 +1424,7 @@ export default function PDV() {
                         ) : (
                           produtosFiltrados.map(produto => {
                             const dadosCategoria = obterDadosCategoria(produto)
+                            const totalUnidades = Object.values(produto.codigosBarras || {}).reduce((a, b) => a + b, 0)
                             
                             return (
                               <div key={produto.id} className="space-y-1">
@@ -1357,10 +1455,10 @@ export default function PDV() {
                                         Estoque: {produto.estoque} • R$ {produto.valorVenda.toFixed(2)}
                                       </div>
                                       
-                                      {/* 🆕 MOSTRAR CÓDIGOS DE BARRAS DISPONÍVEIS */}
-                                      {produto.temCodigoBarras && produto.codigosBarras.length > 0 && (
+                                      {/* 🆕 MOSTRAR CÓDIGOS COM CONTAGEM */}
+                                      {produto.temCodigoBarras && Object.keys(produto.codigosBarras || {}).length > 0 && (
                                         <div className={`text-xs mt-1 ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>
-                                          📱 {produto.codigosBarras.length} código(s) de barras
+                                          📱 {Object.keys(produto.codigosBarras).length} código(s), {totalUnidades} unidades
                                         </div>
                                       )}
                                       {!produto.temCodigoBarras && (
@@ -1373,31 +1471,36 @@ export default function PDV() {
                                   </div>
                                 </button>
 
-                                {/* 🆕 BOTÕES PARA CÓDIGOS ESPECÍFICOS */}
-                                {produto.temCodigoBarras && produto.codigosBarras.length > 1 && (
+                                {/* 🆕 BOTÕES PARA CÓDIGOS ESPECÍFICOS COM CONTAGEM */}
+                                {produto.temCodigoBarras && Object.keys(produto.codigosBarras || {}).length > 1 && (
                                   <div className="ml-6 space-y-1">
-                                    {produto.codigosBarras.slice(0, 3).map((codigo, index) => (
+                                    {Object.entries(produto.codigosBarras).slice(0, 3).map(([codigo, quantidade]) => (
                                       <button
-                                        key={index}
+                                        key={codigo}
                                         onClick={() => adicionarProdutoDaLista(produto, codigo)}
                                         className={`w-full p-2 rounded border transition-all text-left ${
                                           modoNoturno 
                                             ? 'border-gray-600 bg-gray-800 hover:bg-gray-600 text-gray-300' 
                                             : 'border-gray-100 bg-gray-50 hover:bg-gray-100 text-gray-700'
                                         }`}
+                                        disabled={quantidade <= 0}
                                       >
                                         <div className="flex items-center justify-between">
                                           <div>
                                             <div className="text-xs font-mono">📱 {codigo}</div>
-                                            <div className="text-xs opacity-75">Código específico {index + 1}</div>
+                                            <div className="text-xs opacity-75">
+                                              {quantidade > 0 ? `${quantidade} unidades disponíveis` : 'Indisponível'}
+                                            </div>
                                           </div>
-                                          <div className="text-green-500 text-sm">+</div>
+                                          <div className={`text-sm font-bold ${quantidade > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                            {quantidade > 0 ? '+' : '❌'}
+                                          </div>
                                         </div>
                                       </button>
                                     ))}
-                                    {produto.codigosBarras.length > 3 && (
+                                    {Object.keys(produto.codigosBarras).length > 3 && (
                                       <div className={`text-xs text-center py-1 ${modoNoturno ? 'text-gray-500' : 'text-gray-400'}`}>
-                                        +{produto.codigosBarras.length - 3} códigos adicionais
+                                        +{Object.keys(produto.codigosBarras).length - 3} códigos adicionais
                                       </div>
                                     )}
                                   </div>
@@ -1420,7 +1523,7 @@ export default function PDV() {
                   {(!mostrarProdutos || vendaAtiva) && !mostrarProdutosSemCodigo && (
                     <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                       <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                        📱 Scanner de Produtos
+                        📱 Scanner com Contagem
                         {vendaAtiva && <span className="ml-2 text-green-400 text-sm animate-pulse">(ATIVO)</span>}
                       </h3>
                       
@@ -1442,7 +1545,7 @@ export default function PDV() {
                                   ? 'border-gray-600 bg-gray-700 text-white' 
                                   : 'border-gray-400 bg-white text-gray-900'
                             }`}
-                            placeholder={vendaAtiva ? "🔥 VENDA ATIVA - Escaneie os produtos..." : "Escaneie ou digite o código"}
+                            placeholder={vendaAtiva ? "🔥 VENDA ATIVA - Sistema de contagem ativo..." : "Escaneie ou digite o código"}
                             disabled={loading || produtosAtivos.length === 0}
                             autoFocus={vendaAtiva}
                           />
@@ -1458,7 +1561,7 @@ export default function PDV() {
                             className="w-full"
                             disabled={produtosAtivos.length === 0}
                           >
-                            🔍 Buscar
+                            �� Buscar
                           </LoadingButton>
                           <LoadingButton
                             type="button"
@@ -1468,15 +1571,15 @@ export default function PDV() {
                             className="w-full"
                             disabled={produtosAtivos.length === 0}
                           >
-                            📷 Câmera
+                            �� Câmera
                           </LoadingButton>
                         </div>
                       </form>
 
                       <div className={`mt-4 p-3 rounded-lg border ${modoNoturno ? 'bg-blue-900 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
                         <p className={`text-sm ${modoNoturno ? 'text-blue-200' : 'text-blue-800'}`}>
-                          💡 <strong>Novo:</strong> {vendaAtiva 
-                            ? 'Sistema reconhece múltiplos códigos automaticamente!'
+                          💡 <strong>Sistema de Contagem:</strong> {vendaAtiva 
+                            ? 'Cada código mostra quantas unidades estão disponíveis!'
                             : 'Use F5-F9 para categorias ou F10 para produtos sem código!'
                           }
                         </p>
@@ -1484,8 +1587,7 @@ export default function PDV() {
                     </div>
                   )}
 
-                  {/* RESTO DOS COMPONENTES MANTIDOS (CLIENTE, DESCONTO, ESTATÍSTICAS) */}
-                  {/* Seção de Cliente */}
+                  {/* Seção de Cliente (MANTIDA ORIGINAL) */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
                       👥 Cliente da Venda
@@ -1500,7 +1602,7 @@ export default function PDV() {
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold mr-4 ${
                               clienteSelecionado.ativo ? 'bg-green-500' : 'bg-gray-400'
                             }`}>
-                              {clienteSelecionado.tipoCliente === 'pessoa_fisica' ? '👤' : '🏢'}
+                              {clienteSelecionado.tipoCliente === 'pessoa_fisica' ? '��' : '🏢'}
                             </div>
                             <div>
                               <h4 className={`font-bold ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
@@ -1581,7 +1683,7 @@ export default function PDV() {
                   {/* Desconto inteligente (MANTIDO ORIGINAL) */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                      💸 Desconto na Venda
+                      �� Desconto na Venda
                     </h3>
                     
                     <div className="flex mb-4 bg-gray-100 rounded-lg p-1">
@@ -1706,7 +1808,7 @@ export default function PDV() {
                     )}
                   </div>
 
-                  {/* 🆕 ESTATÍSTICAS ATUALIZADAS */}
+                  {/* 🆕 ESTATÍSTICAS COM CONTAGEM */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📊 Estatísticas</h3>
                     
@@ -1721,7 +1823,6 @@ export default function PDV() {
                         <span className={`font-bold ${modoNoturno ? 'text-green-100' : 'text-green-600'}`}>{produtosComCodigoBarras.length}</span>
                       </div>
 
-                      {/* 🆕 ESTATÍSTICA DE PRODUTOS SEM CÓDIGO */}
                       <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-yellow-900' : 'bg-yellow-50'}`}>
                         <span className={`font-medium ${modoNoturno ? 'text-yellow-200' : 'text-yellow-800'}`}>Produtos Sem Código</span>
                         <span className={`font-bold ${modoNoturno ? 'text-yellow-100' : 'text-yellow-600'}`}>{produtosSemCodigo.length}</span>
@@ -1737,11 +1838,11 @@ export default function PDV() {
                         <span className={`font-bold ${modoNoturno ? 'text-orange-100' : 'text-orange-600'}`}>{itensVenda.length}</span>
                       </div>
 
-                      {/* 🆕 TOTAL DE CÓDIGOS DE BARRAS */}
+                      {/* 🆕 TOTAL DE CÓDIGOS COM CONTAGEM */}
                       <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-indigo-900' : 'bg-indigo-50'}`}>
-                        <span className={`font-medium ${modoNoturno ? 'text-indigo-200' : 'text-indigo-800'}`}>Total de Códigos</span>
+                        <span className={`font-medium ${modoNoturno ? 'text-indigo-200' : 'text-indigo-800'}`}>Total de Unidades</span>
                         <span className={`font-bold ${modoNoturno ? 'text-indigo-100' : 'text-indigo-600'}`}>
-                          {produtos?.reduce((total, p) => total + (p.codigosBarras?.length || 0), 0) || 0}
+                          {produtos?.reduce((total, p) => total + Object.values(p.codigosBarras || {}).reduce((a, b) => a + b, 0), 0) || 0}
                         </span>
                       </div>
 
@@ -1763,7 +1864,7 @@ export default function PDV() {
                             ? modoNoturno ? 'text-green-100' : 'text-green-600'
                             : modoNoturno ? 'text-gray-300' : 'text-gray-600'
                         }`}>
-                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '📂 FILTRO' : mostrarProdutosSemCodigo ? '📝 SEM CÓDIGO' : '⏸️ Manual'}
+                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '�� FILTRO' : mostrarProdutosSemCodigo ? '📝 SEM CÓDIGO' : '⏸️ Manual'}
                         </span>
                       </div>
 
@@ -1799,7 +1900,7 @@ export default function PDV() {
                   </div>
                 </div>
 
-                {/* Coluna 2: Lista de Itens da Venda (ATUALIZADA COM CÓDIGOS ESPECÍFICOS) */}
+                {/* 🆕 COLUNA 2: LISTA DE ITENS COM CONTAGEM */}
                 <div className="lg:col-span-2">
                   <div className={`rounded-xl shadow-lg overflow-hidden transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <div className={`px-6 py-4 border-b flex justify-between items-center ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -1832,19 +1933,19 @@ export default function PDV() {
                           {produtosAtivos.length === 0 
                             ? 'Cadastre produtos ativos para começar a vender'
                             : vendaAtiva
-                              ? '🔥 Escaneie códigos - múltiplos códigos e produtos avulsos suportados!'
+                              ? '🔥 Sistema de contagem ativo! Escaneie códigos de barras'
                               : mostrarProdutos
                                 ? '📂 Clique nos produtos da lista para adicionar à venda'
                                 : mostrarProdutosSemCodigo
                                   ? '📝 Adicione produtos sem código rapidamente'
-                                  : 'Escaneie códigos, filtre por categoria ou adicione produtos avulsos'
+                                  : 'Sistema com contagem de códigos e produtos avulsos'
                           }
                         </p>
                         <div className={`text-sm space-y-2 ${modoNoturno ? 'text-gray-400' : 'text-gray-400'}`}>
                           <div>💡 {vendaAtiva 
-                            ? 'Novo: Sistema detecta múltiplos códigos automaticamente!'
+                            ? 'Sistema mostra quantas unidades estão disponíveis de cada código!'
                             : mostrarProdutos
-                              ? 'Produtos organizados por categoria com códigos específicos'
+                              ? 'Produtos organizados com contagem de códigos específicos'
                               : mostrarProdutosSemCodigo
                                 ? 'Adicione balas avulsas, cigarros soltos e produtos sem código'
                                 : 'F5-F9=Categorias | F10=Sem Código | F4=Scanner'
@@ -1872,7 +1973,7 @@ export default function PDV() {
                       </div>
                     ) : (
                       <>
-                        {/* 🆕 LISTA DE ITENS MOBILE ATUALIZADA */}
+                        {/* 🆕 LISTA DE ITENS MOBILE COM CONTAGEM */}
                         <div className={`block sm:hidden divide-y ${modoNoturno ? 'divide-gray-700' : 'divide-gray-200'}`}>
                           {itensVenda.map((item, index) => (
                             <div key={`${item.produto.id}-${item.codigoBarrasUsado || index}`} className="p-4">
@@ -1882,7 +1983,7 @@ export default function PDV() {
                                   <div className={`space-y-1 text-xs mt-1 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
                                     <p><span className="font-medium">Código:</span> #{item.produto.codigo}</p>
                                     
-                                    {/* 🆕 MOSTRAR CÓDIGO ESPECÍFICO USADO */}
+                                    {/* 🆕 MOSTRAR CÓDIGO ESPECÍFICO USADO COM CONTAGEM */}
                                     {item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO' && (
                                       <p><span className="font-medium text-blue-600">Código usado:</span> {item.codigoBarrasUsado}</p>
                                     )}
@@ -1928,7 +2029,7 @@ export default function PDV() {
                           ))}
                         </div>
 
-                        {/* 🆕 LISTA DE ITENS DESKTOP ATUALIZADA */}
+                        {/* 🆕 LISTA DE ITENS DESKTOP COM CONTAGEM */}
                         <div className="hidden sm:block overflow-x-auto">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className={modoNoturno ? 'bg-gray-700' : 'bg-gray-50'}>
@@ -1969,12 +2070,19 @@ export default function PDV() {
                                     </div>
                                   </td>
                                   
-                                  {/* 🆕 COLUNA CÓDIGO USADO */}
+                                  {/* 🆕 COLUNA CÓDIGO USADO COM CONTAGEM */}
                                   <td className={`px-6 py-4 whitespace-nowrap text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-900'}`}>
                                     {item.codigoBarrasUsado === 'PRODUTO_AVULSO' ? (
                                       <span className="text-yellow-600 font-mono text-xs">📝 AVULSO</span>
                                     ) : item.codigoBarrasUsado ? (
-                                      <span className="text-blue-600 font-mono text-xs">📱 {item.codigoBarrasUsado}</span>
+                                      <div>
+                                        <span className="text-blue-600 font-mono text-xs">📱 {item.codigoBarrasUsado}</span>
+                                        {item.produto.codigosBarras && item.produto.codigosBarras[item.codigoBarrasUsado] && (
+                                          <div className="text-xs text-green-600">
+                                            {item.produto.codigosBarras[item.codigoBarrasUsado]} disponíveis
+                                          </div>
+                                        )}
+                                      </div>
                                     ) : (
                                       <span className="text-gray-400 text-xs">Código principal</span>
                                     )}
@@ -2071,7 +2179,7 @@ export default function PDV() {
                           <div className={`text-sm mt-3 flex justify-between items-center ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
                             <div>
                               {itensVenda.length} {itensVenda.length === 1 ? 'item' : 'itens'} • {itensVenda.reduce((total, item) => total + item.quantidade, 0)} unidades
-                              {vendaAtiva && <span className="ml-2 text-green-400 font-medium">• Venda Ativa 🔥</span>}
+                              {vendaAtiva && <span className="ml-2 text-green-400 font-medium">• Sistema Contagem 🔥</span>}
                               {mostrarProdutos && <span className="ml-2 text-blue-400 font-medium">• Filtro Ativo 📂</span>}
                               {mostrarProdutosSemCodigo && <span className="ml-2 text-yellow-400 font-medium">• Sem Código 📝</span>}
                               {clienteSelecionado && <span className="ml-2 font-medium">• Cliente: {clienteSelecionado.nome}</span>}
@@ -2100,7 +2208,7 @@ export default function PDV() {
             </>
           )}
 
-          {/* MODAIS MANTIDOS ORIGINAIS (Modal de pagamento e Scanner) */}
+          {/* 🆕 MODAL DE PAGAMENTO COM CONTAGEM */}
           {modalPagamentoAberto && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl transition-colors duration-300 ${
@@ -2111,7 +2219,7 @@ export default function PDV() {
                 }`}>
                   <div className="flex items-center justify-between">
                     <h2 className={`text-xl font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                      💳 Finalizar Venda
+                      💳 Finalizar Venda - Sistema de Contagem
                     </h2>
                     <button
                       onClick={() => setModalPagamentoAberto(false)}
@@ -2130,7 +2238,7 @@ export default function PDV() {
                     modoNoturno ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
                   }`}>
                     <h3 className={`font-bold mb-3 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                      📋 Resumo da Venda com Múltiplos Códigos
+                      📋 Resumo da Venda com Sistema de Contagem
                     </h3>
                     
                     {clienteSelecionado && (
@@ -2152,12 +2260,17 @@ export default function PDV() {
                         </span>
                       </div>
                       
-                      {/* 🆕 DETALHES DOS CÓDIGOS USADOS */}
+                      {/* 🆕 DETALHES DOS CÓDIGOS USADOS COM CONTAGEM */}
                       <div className="text-xs space-y-1">
-                        <div className={`${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>Códigos utilizados:</div>
+                        <div className={`${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>Códigos utilizados com contagem:</div>
                         {itensVenda.map((item, index) => (
                           <div key={index} className={`ml-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
                             • {item.produto.nome}: {item.codigoBarrasUsado === 'PRODUTO_AVULSO' ? '📝 Produto Avulso' : item.codigoBarrasUsado || 'Código principal'}
+                            {item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO' && item.produto.codigosBarras && item.produto.codigosBarras[item.codigoBarrasUsado] && (
+                              <span className="text-green-600 ml-1">
+                                ({item.produto.codigosBarras[item.codigoBarrasUsado]} disponíveis)
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -2327,7 +2440,7 @@ export default function PDV() {
             <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
               <div className={`rounded-xl shadow-xl w-full max-w-md ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                 <div className={`flex justify-between items-center p-4 border-b ${modoNoturno ? 'border-gray-600' : 'border-gray-200'}`}>
-                  <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>📱 Scanner PDV Pro</h3>
+                  <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>📱 Scanner PDV - Contagem</h3>
                   <button
                     onClick={pararScanner}
                     className={`hover:${modoNoturno ? 'text-gray-300' : 'text-gray-600'} transition-colors ${modoNoturno ? 'text-gray-400' : 'text-gray-400'}`}
@@ -2359,7 +2472,7 @@ export default function PDV() {
                   
                   <div className="mt-4 text-center">
                     <p className={`text-sm mb-4 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
-                      Sistema com múltiplos códigos ativo - Escaneie qualquer código cadastrado
+                      Sistema de contagem ativo - Mostra unidades disponíveis por código
                     </p>
                     <LoadingButton
                       onClick={simularLeituraCodigoBarras}
@@ -2376,32 +2489,35 @@ export default function PDV() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES FINAIS ATUALIZADAS */}
+          {/* 🆕 INFORMAÇÕES FINAIS COM SISTEMA DE CONTAGEM */}
           {!loadingProdutos && !loadingClientes && !loadingCategorias && (
             <div className={`mt-8 border rounded-xl p-4 transition-colors duration-300 ${
               modoNoturno ? 'bg-green-900 border-green-700' : 'bg-green-50 border-green-200'
             }`}>
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <div className="text-2xl">🚀</div>
+                  <div className="text-2xl">🎯</div>
                 </div>
                 <div className="ml-3">
                   <h3 className={`text-sm font-medium ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
-                    PDV Pro com Múltiplos Códigos de Barras e Produtos Avulsos
+                    PDV Pro Finalizado - Sistema Completo de Contagem de Códigos
                   </h3>
                   <div className={`mt-2 text-sm space-y-1 ${modoNoturno ? 'text-green-300' : 'text-green-700'}`}>
-                    <p>• <strong>🏷️ Múltiplos códigos:</strong> Sistema reconhece todos os códigos cadastrados por produto</p>
-                    <p>• <strong>📝 Produtos avulsos:</strong> F10 para adicionar balas soltas, cigarros avulsos, etc.</p>
-                    <p>• <strong>🔍 Busca inteligente:</strong> Encontre produtos por nome ou códigos específicos</p>
-                    <p>• <strong>📂 Filtros por categoria:</strong> F5-F9 para acesso rápido às categorias principais</p>
-                    <p>• <strong>🎯 Controle granular:</strong> Sistema registra qual código específico foi usado na venda</p>
-                    <p>• <strong>📱 Scanner híbrido:</strong> Câmera + leitor físico + busca manual integrados</p>
-                    <p>• <strong>👥 Gestão completa:</strong> Clientes, descontos, formas de pagamento e relatórios</p>
-                    <p>• <strong>🔥 Venda ativa:</strong> Modo contínuo para escaneamento automático de múltiplos códigos</p>
-                    <p>• <strong>🧾 Cupom detalhado:</strong> Impressão com códigos específicos utilizados</p>
-                    <p>• <strong>🔄 Integração total:</strong> Dados sincronizados com sistema de produtos e movimentações</p>
-                    <p>• <strong>⌨️ Atalhos completos:</strong> F1-F10 para máxima produtividade</p>
-                    <p>• <strong>🌙 Modo noturno:</strong> Interface adaptada para diferentes ambientes</p>
+                    <p>• <strong>🔢 Sistema de contagem perfeito:</strong> Cada código registra quantas unidades existem</p>
+                    <p>• <strong>📱 Validação inteligente:</strong> Verifica disponibilidade antes de adicionar à venda</p>
+                    <p>• <strong>🔄 Decremento automático:</strong> Remove apenas 1 unidade do código específico usado</p>
+                    <p>• <strong>📝 Produtos avulsos:</strong> F10 para balas soltas, cigarros avulsos, etc.</p>
+                    <p>• <strong>📂 Filtros por categoria:</strong> F5-F9 para acesso rápido organizado</p>
+                    <p>• <strong>🎯 Controle granular:</strong> Sistema registra qual código específico foi usado</p>
+                    <p>• <strong>📱 Scanner híbrido:</strong> Câmera + leitor físico + busca manual</p>
+                    <p>• <strong>👥 Gestão completa:</strong> Clientes, descontos, formas de pagamento</p>
+                    <p>• <strong>🔥 Venda ativa:</strong> Modo contínuo com sistema de contagem automático</p>
+                    <p>• <strong>🧾 Cupom detalhado:</strong> Impressão com códigos específicos e quantidades</p>
+                    <p>• <strong>🔄 Integração total:</strong> Sincronizado com produtos e movimentações</p>
+                    <p>• <strong>⌨️ Atalhos produtivos:</strong> F1-F10 para máxima eficiência</p>
+                    <p>• <strong>🌙 Interface adaptável:</strong> Modo noturno para diferentes ambientes</p>
+                    <p>• <strong>💾 Movimentações automáticas:</strong> Cria saídas que decrementam códigos corretamente</p>
+                    <p>• <strong>🏆 Sistema definitivo:</strong> Solução completa para múltiplos códigos de barras</p>
                   </div>
                 </div>
               </div>

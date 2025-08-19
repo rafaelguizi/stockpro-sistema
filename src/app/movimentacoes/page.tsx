@@ -1,4 +1,4 @@
-// src/app/movimentacoes/page.tsx
+// src/app/movimentacoes/page.tsx - VERSÃO CORRIGIDA COM SISTEMA DE CONTAGEM
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,16 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// 🆕 INTERFACE PRODUTO ATUALIZADA
+// �� INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
   categoriaId?: string
-  codigosBarras: string[]      // 🆕 Array de códigos
-  temCodigoBarras: boolean     // 🆕 Controle se usa código
-  isDestilado: boolean         // 🆕 Bebida sem validade
+  codigosBarras: Record<string, number>  // 🆕 CORRIGIDO: Objeto com código: quantidade
+  temCodigoBarras: boolean
+  isDestilado: boolean
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -39,7 +39,6 @@ interface Produto {
   ativo: boolean
   dataCadastro: string
   userId: string
-  // Campos para validade
   temValidade?: boolean
   dataValidade?: string
   diasAlerta?: number
@@ -59,8 +58,8 @@ interface Movimentacao {
   hora: string
   observacao: string
   userId: string
-  codigoBarrasUsado?: string   // 🆕 Código específico usado
-  clienteId?: string           // 🆕 Dados do cliente
+  codigoBarrasUsado?: string
+  clienteId?: string
   clienteNome?: string
   clienteCpfCnpj?: string
   formaPagamento?: string
@@ -68,60 +67,58 @@ interface Movimentacao {
   troco?: number
 }
 
-// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS DE BARRAS PARA ENTRADA
+// 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS CORRIGIDO
 interface GerenciadorCodigosBarrasProps {
-  codigosBarras: string[]
-  onCodigosChange: (codigos: string[]) => void
+  codigosBarras: Record<string, number>  // 🆕 CORRIGIDO: Objeto com contagem
+  onCodigosChange: (codigos: Record<string, number>) => void  // 🆕 CORRIGIDO
   disabled?: boolean
 }
 
 function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: GerenciadorCodigosBarrasProps) {
   const [novoCodigoInput, setNovoCodigoInput] = useState('')
   const [showScanner, setShowScanner] = useState(false)
-  const [quantidadeReplicacao, setQuantidadeReplicacao] = useState(1)
+  const [quantidadeAdicionar, setQuantidadeAdicionar] = useState(1)
   const videoRef = useRef<HTMLVideoElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // 🆕 ADICIONAR CÓDIGO COM QUANTIDADE
   const adicionarCodigo = () => {
     const codigo = novoCodigoInput.trim()
     if (!codigo) return
 
-    // Verificar se código já existe
-    if (codigosBarras.includes(codigo)) {
-      alert('Este código já foi adicionado!')
-      return
-    }
+    const novosCodeigos = { ...codigosBarras }
+    novosCodeigos[codigo] = (novosCodeigos[codigo] || 0) + quantidadeAdicionar
 
-    // Adicionar o código (ou múltiplos se for replicação)
-    const novosCodigos = []
-    for (let i = 0; i < quantidadeReplicacao; i++) {
-      if (quantidadeReplicacao === 1) {
-        novosCodigos.push(codigo)
-      } else {
-        novosCodigos.push(`${codigo}_${i + 1}`)
-      }
-    }
-
-    // Verificar duplicatas nos novos códigos
-    const codigosUnicos = novosCodigos.filter(c => !codigosBarras.includes(c))
-    
-    onCodigosChange([...codigosBarras, ...codigosUnicos])
+    onCodigosChange(novosCodeigos)
     setNovoCodigoInput('')
-    setQuantidadeReplicacao(1)
+    setQuantidadeAdicionar(1)
     
-    // Focar de volta no input
     setTimeout(() => {
       inputRef.current?.focus()
     }, 100)
   }
 
+  // 🆕 REMOVER CÓDIGO COMPLETAMENTE
   const removerCodigo = (codigo: string) => {
-    onCodigosChange(codigosBarras.filter(c => c !== codigo))
+    const novosCodeigos = { ...codigosBarras }
+    delete novosCodeigos[codigo]
+    onCodigosChange(novosCodeigos)
+  }
+
+  // 🆕 ALTERAR QUANTIDADE DE UM CÓDIGO
+  const alterarQuantidade = (codigo: string, novaQuantidade: number) => {
+    const novosCodeigos = { ...codigosBarras }
+    if (novaQuantidade <= 0) {
+      delete novosCodeigos[codigo]
+    } else {
+      novosCodeigos[codigo] = novaQuantidade
+    }
+    onCodigosChange(novosCodeigos)
   }
 
   const limparTodosCodigos = () => {
     if (confirm('Tem certeza que deseja remover todos os códigos?')) {
-      onCodigosChange([])
+      onCodigosChange({})
     }
   }
 
@@ -163,15 +160,15 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-bold text-gray-800">📱 Códigos de Barras da Entrada</h4>
+        <h4 className="text-sm font-bold text-gray-800">📱 Códigos de Barras com Contagem</h4>
         <div className="text-sm text-gray-600">
-          {codigosBarras.length} código(s) adicionado(s)
+          {Object.keys(codigosBarras).length} tipo(s), {Object.values(codigosBarras).reduce((a, b) => a + b, 0)} unidade(s)
         </div>
       </div>
 
       {/* Formulário para adicionar código */}
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="sm:col-span-2">
             <input
               ref={inputRef}
@@ -184,6 +181,18 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
             />
           </div>
           
+          <div>
+            <input
+              type="number"
+              min="1"
+              value={quantidadeAdicionar}
+              onChange={(e) => setQuantidadeAdicionar(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-full border-2 border-gray-400 rounded-lg px-4 py-3 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all duration-200"
+              placeholder="Qtd"
+              disabled={disabled}
+            />
+          </div>
+          
           <div className="flex space-x-2">
             <LoadingButton
               type="submit"
@@ -192,7 +201,7 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
               className="flex-1"
               disabled={!novoCodigoInput.trim() || disabled}
             >
-              ➕ Adicionar
+              ➕
             </LoadingButton>
             <LoadingButton
               type="button"
@@ -205,30 +214,13 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
             </LoadingButton>
           </div>
         </div>
-
-        {/* Replicação de códigos iguais */}
-        <div className="flex items-center space-x-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <label className="text-sm font-medium text-blue-800">
-            🔄 Replicar código para múltiplas unidades:
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value={quantidadeReplicacao}
-            onChange={(e) => setQuantidadeReplicacao(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-20 border border-blue-300 rounded px-2 py-1 text-center font-medium"
-            disabled={disabled}
-          />
-          <span className="text-sm text-blue-700">unidades</span>
-        </div>
       </form>
 
-      {/* Lista de códigos adicionados */}
-      {codigosBarras.length > 0 && (
+      {/* 🆕 LISTA DE CÓDIGOS COM CONTAGEM */}
+      {Object.keys(codigosBarras).length > 0 && (
         <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
           <div className="flex items-center justify-between mb-3">
-            <h5 className="text-sm font-bold text-gray-700">Códigos Adicionados:</h5>
+            <h5 className="text-sm font-bold text-gray-700">Códigos com Quantidades:</h5>
             <LoadingButton
               onClick={limparTodosCodigos}
               variant="danger"
@@ -239,10 +231,33 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
             </LoadingButton>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-            {codigosBarras.map((codigo, index) => (
-              <div key={index} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
-                <span className="font-mono text-sm text-gray-800">{codigo}</span>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {Object.entries(codigosBarras).map(([codigo, quantidade]) => (
+              <div key={codigo} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
+                <div className="flex items-center flex-1">
+                  <span className="font-mono text-sm text-gray-800 mr-3">{codigo}</span>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => alterarQuantidade(codigo, quantidade - 1)}
+                      className="text-red-600 hover:text-red-800 text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      disabled={disabled || quantidade <= 1}
+                    >
+                      ➖
+                    </button>
+                    <span className="font-bold text-blue-600 min-w-[3rem] text-center bg-blue-50 px-2 py-1 rounded">
+                      {quantidade} un.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => alterarQuantidade(codigo, quantidade + 1)}
+                      className="text-green-600 hover:text-green-800 text-sm px-2 py-1 rounded hover:bg-green-50 transition-colors"
+                      disabled={disabled}
+                    >
+                      ➕
+                    </button>
+                  </div>
+                </div>
                 <button
                   onClick={() => removerCodigo(codigo)}
                   className="text-red-600 hover:text-red-800 transition-colors ml-2"
@@ -312,7 +327,7 @@ function GerenciadorCodigosBarras({ codigosBarras, onCodigosChange, disabled }: 
   )
 }
 
-// 🆕 COMPONENTE DE BUSCA INTELIGENTE ATUALIZADO COM MÚLTIPLOS CÓDIGOS
+// 🆕 COMPONENTE DE BUSCA ATUALIZADO COM CONTAGEM
 interface ProdutoSelectorProps {
   produtos: Produto[]
   categorias?: CategoriaFirestore[]
@@ -328,7 +343,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
   const [produtosFiltrados, setProdutosFiltrados] = useState<Produto[]>(produtos)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Função para obter dados da categoria
   const obterDadosCategoria = useCallback((produto: Produto) => {
     if (produto.categoriaId && categorias) {
       const categoria = categorias.find(cat => cat.id === produto.categoriaId)
@@ -352,7 +366,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
     }
   }, [categorias])
 
-  // Filtrar produtos conforme busca
+  // 🆕 FILTRAR PRODUTOS CORRIGIDO PARA CONTAGEM
   const filtrarProdutos = (termoBusca: string) => {
     if (!termoBusca.trim()) {
       setProdutosFiltrados(produtos)
@@ -363,8 +377,8 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
       produto.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
       produto.codigo.toLowerCase().includes(termoBusca.toLowerCase()) ||
       produto.categoria?.toLowerCase().includes(termoBusca.toLowerCase()) ||
-      // 🆕 BUSCAR EM CÓDIGOS DE BARRAS
-      produto.codigosBarras?.some(codigo => 
+      // 🆕 BUSCAR EM CÓDIGOS COM CONTAGEM
+      Object.keys(produto.codigosBarras || {}).some(codigo => 
         codigo.toLowerCase().includes(termoBusca.toLowerCase())
       )
     ).sort((a, b) => {
@@ -416,7 +430,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
     }
   }, [mostrarLista])
 
-  // Verificar validade do produto
   const verificarValidade = (produto: Produto) => {
     if (!produto.temValidade || !produto.dataValidade) return null
 
@@ -466,7 +479,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
         )}
       </div>
 
-      {/* 🆕 LISTA DE PRODUTOS COM CÓDIGOS MÚLTIPLOS */}
+      {/* 🆕 LISTA DE PRODUTOS COM CONTAGEM DE CÓDIGOS */}
       {mostrarLista && !disabled && (
         <div className="absolute z-20 w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-xl max-h-60 overflow-y-auto animate-fade-in">
           {produtosFiltrados.length === 0 ? (
@@ -489,6 +502,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
               {produtosFiltrados.map((produto, index) => {
                 const validadeInfo = verificarValidade(produto)
                 const dadosCategoria = obterDadosCategoria(produto)
+                const totalUnidades = Object.values(produto.codigosBarras || {}).reduce((a, b) => a + b, 0)
                 
                 return (
                   <div key={produto.id} className="border-b border-gray-100 last:border-b-0">
@@ -521,10 +535,10 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                               <span>R$ {produto.valorVenda.toFixed(2)}</span>
                             </div>
                             
-                            {/* 🆕 MOSTRAR CÓDIGOS DE BARRAS DISPONÍVEIS */}
-                            {produto.temCodigoBarras && produto.codigosBarras.length > 0 && (
+                            {/* 🆕 MOSTRAR CÓDIGOS COM CONTAGEM */}
+                            {produto.temCodigoBarras && Object.keys(produto.codigosBarras || {}).length > 0 && (
                               <div className="text-xs text-blue-600 mt-1">
-                                📱 {produto.codigosBarras.length} código(s) de barras
+                                📱 {Object.keys(produto.codigosBarras).length} código(s), {totalUnidades} unidades
                               </div>
                             )}
                             {!produto.temCodigoBarras && (
@@ -584,27 +598,29 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                       </div>
                     </button>
 
-                    {/* 🆕 CÓDIGOS ESPECÍFICOS PARA SELEÇÃO */}
-                    {produto.temCodigoBarras && produto.codigosBarras.length > 1 && (
+                    {/* 🆕 CÓDIGOS ESPECÍFICOS COM QUANTIDADES PARA SELEÇÃO */}
+                    {produto.temCodigoBarras && Object.keys(produto.codigosBarras || {}).length > 0 && (
                       <div className="px-4 pb-2 bg-gray-50">
                         <div className="text-xs text-gray-600 mb-2 font-medium">Selecionar código específico:</div>
                         <div className="grid grid-cols-1 gap-1">
-                          {produto.codigosBarras.slice(0, 4).map((codigo, index) => (
+                          {Object.entries(produto.codigosBarras).slice(0, 4).map(([codigo, quantidade]) => (
                             <button
-                              key={index}
+                              key={codigo}
                               type="button"
                               onClick={() => handleSelect(produto, codigo)}
                               className="text-left p-2 rounded border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all text-xs"
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-mono text-blue-600">📱 {codigo}</span>
-                                <span className="text-gray-500">Código {index + 1}</span>
+                                <span className="text-green-600 font-bold bg-green-100 px-2 py-1 rounded">
+                                  {quantidade} unid.
+                                </span>
                               </div>
                             </button>
                           ))}
-                          {produto.codigosBarras.length > 4 && (
+                          {Object.keys(produto.codigosBarras).length > 4 && (
                             <div className="text-xs text-gray-500 text-center py-1">
-                              +{produto.codigosBarras.length - 4} códigos adicionais
+                              +{Object.keys(produto.codigosBarras).length - 4} códigos adicionais
                             </div>
                           )}
                         </div>
@@ -622,7 +638,7 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
         </div>
       )}
 
-      {/* 🆕 PRODUTO SELECIONADO COM CÓDIGO ESPECÍFICO */}
+      {/* 🆕 PRODUTO SELECIONADO COM CÓDIGO E QUANTIDADE */}
       {produtoSelecionado && !mostrarLista && (
         <div className="mt-3 p-4 bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-lg animate-slide-down">
           <div className="flex justify-between items-start">
@@ -646,12 +662,15 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                     </span>
                   </div>
                   
-                  {/* 🆕 CÓDIGO ESPECÍFICO SELECIONADO */}
+                  {/* 🆕 CÓDIGO ESPECÍFICO COM QUANTIDADE DISPONÍVEL */}
                   {codigoSelecionado && (
                     <div className="flex items-center space-x-4 flex-wrap">
                       <span className="text-blue-800 font-medium">
                         <strong>Código selecionado:</strong> 
                         <span className="font-mono bg-blue-100 px-2 py-1 rounded ml-2">📱 {codigoSelecionado}</span>
+                      </span>
+                      <span className="text-green-800 font-bold bg-green-100 px-2 py-1 rounded">
+                        {produtoSelecionado.codigosBarras[codigoSelecionado] || 0} unidades disponíveis
                       </span>
                     </div>
                   )}
@@ -665,20 +684,21 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                     <span><strong>Preço venda:</strong> R$ {produtoSelecionado.valorVenda.toFixed(2)}</span>
                   </div>
 
-                  {/* 🆕 INFORMAÇÕES DE CÓDIGOS */}
-                  {produtoSelecionado.temCodigoBarras && produtoSelecionado.codigosBarras.length > 0 && (
+                  {/* 🆕 INFORMAÇÕES DE CÓDIGOS COM CONTAGEM */}
+                  {produtoSelecionado.temCodigoBarras && Object.keys(produtoSelecionado.codigosBarras || {}).length > 0 && (
                     <div className="bg-blue-100 p-2 rounded border-l-4 border-blue-400">
                       <div className="text-xs text-blue-800">
-                        <strong>📱 Códigos de barras ({produtoSelecionado.codigosBarras.length}):</strong>
+                        <strong>📱 Códigos de barras ({Object.keys(produtoSelecionado.codigosBarras).length} tipos, {Object.values(produtoSelecionado.codigosBarras).reduce((a, b) => a + b, 0)} unidades):</strong>
                         <div className="mt-1 space-y-1">
-                          {produtoSelecionado.codigosBarras.slice(0, 3).map((codigo, index) => (
-                            <div key={index} className="font-mono text-xs">
-                              • {codigo} {codigo === codigoSelecionado && <span className="text-green-600">(selecionado)</span>}
+                          {Object.entries(produtoSelecionado.codigosBarras).slice(0, 3).map(([codigo, quantidade]) => (
+                            <div key={codigo} className="font-mono text-xs flex justify-between items-center">
+                              <span>• {codigo} {codigo === codigoSelecionado && <span className="text-green-600">(selecionado)</span>}</span>
+                              <span className="font-bold text-green-600">{quantidade} un.</span>
                             </div>
                           ))}
-                          {produtoSelecionado.codigosBarras.length > 3 && (
+                          {Object.keys(produtoSelecionado.codigosBarras).length > 3 && (
                             <div className="text-xs text-blue-600">
-                              +{produtoSelecionado.codigosBarras.length - 3} códigos adicionais
+                              +{Object.keys(produtoSelecionado.codigosBarras).length - 3} códigos adicionais
                             </div>
                           )}
                         </div>
@@ -702,7 +722,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                     </div>
                   )}
                   
-                  {/* Validade do produto */}
                   {produtoSelecionado.temValidade && produtoSelecionado.dataValidade && !produtoSelecionado.isDestilado && (
                     <div className="flex items-center space-x-4 flex-wrap">
                       <span><strong>Validade:</strong> {(() => {
@@ -731,7 +750,6 @@ function ProdutoSelector({ produtos, categorias, onSelect, produtoSelecionado, c
                     </div>
                   )}
                   
-                  {/* Alertas do produto */}
                   <div className="flex items-center space-x-2 mt-2 flex-wrap">
                     {produtoSelecionado.estoque <= 0 && (
                       <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
@@ -773,7 +791,6 @@ export default function Movimentacoes() {
   const { user } = useAuth()
   const toast = useToastContext()
 
-  // Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
@@ -794,7 +811,6 @@ export default function Movimentacoes() {
     }
   }, [])
   
-  // Hooks do Firestore
   const { 
     data: categorias, 
     loading: loadingCategorias 
@@ -816,14 +832,12 @@ export default function Movimentacoes() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  // 🆕 ESTADOS DO PRODUTO E CÓDIGO SELECIONADO
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null)
   const [codigoSelecionado, setCodigoSelecionado] = useState<string>('')
   
-  // 🆕 ESTADOS PARA CÓDIGOS DA ENTRADA
-  const [novosCodigosEntrada, setNovosCodigosEntrada] = useState<string[]>([])
+  // 🆕 ESTADOS PARA CÓDIGOS DA ENTRADA COM CONTAGEM
+  const [novosCodigosEntrada, setNovosCodigosEntrada] = useState<Record<string, number>>({})
   
-  // Estados do formulário
   const [formData, setFormData] = useState({
     tipo: 'entrada' as 'entrada' | 'saida',
     quantidade: '',
@@ -838,18 +852,14 @@ export default function Movimentacoes() {
   const [filtroDataInicio, setFiltroDataInicio] = useState('')
   const [filtroDataFim, setFiltroDataFim] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
-  // 🆕 NOVO FILTRO POR CÓDIGO DE BARRAS
   const [filtroCodigoBarras, setFiltroCodigoBarras] = useState('')
   
-  // Estados de ordenação
   const [ordenacao, setOrdenacao] = useState<'data_desc' | 'data_asc' | 'produto_asc' | 'valor_desc'>('data_desc')
   
-  // Estados extras
   const [modoNoturno, setModoNoturno] = useState(false)
   const [itensSelecionados, setItensSelecionados] = useState<string[]>([])
   const [mostrarFiltrosAvancados, setMostrarFiltrosAvancados] = useState(false)
 
-  // Função para obter dados da categoria
   const obterDadosCategoria = useCallback((produto: Produto) => {
     if (produto.categoriaId && categorias) {
       const categoria = categorias.find(cat => cat.id === produto.categoriaId)
@@ -873,7 +883,6 @@ export default function Movimentacoes() {
     }
   }, [categorias])
 
-  // Categorias para filtro
   const categoriasParaFiltro = useMemo(() => {
     if (!categorias) return []
     return categorias.filter(cat => cat.ativo).sort((a, b) => a.nome.localeCompare(b.nome))
@@ -882,7 +891,6 @@ export default function Movimentacoes() {
   const produtosAtivos = produtos ? produtos.filter(p => p.ativo) : []
   const isLoadingData = loadingProdutos || loadingMovimentacoes || loadingCategorias
 
-  // Atalhos de teclado
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'n') {
@@ -904,16 +912,14 @@ export default function Movimentacoes() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [showForm, produtosAtivos.length])
 
-  // 🆕 FUNÇÃO PARA SELECIONAR PRODUTO E CÓDIGO
   const handleProdutoSelect = (produto: Produto | null, codigoEspecifico?: string) => {
     setProdutoSelecionado(produto)
     setCodigoSelecionado(codigoEspecifico || '')
   }
 
-  // 🆕 LIMPAR CÓDIGOS QUANDO TROCAR TIPO
   useEffect(() => {
     if (formData.tipo === 'saida') {
-      setNovosCodigosEntrada([])
+      setNovosCodigosEntrada({})
     }
   }, [formData.tipo])
 
@@ -925,11 +931,11 @@ export default function Movimentacoes() {
     })
     setProdutoSelecionado(null)
     setCodigoSelecionado('')
-    setNovosCodigosEntrada([])
+    setNovosCodigosEntrada({})
     setShowForm(false)
   }
 
-  // 🆕 FUNÇÃO handleSubmit TOTALMENTE ATUALIZADA
+  // 🆕 FUNÇÃO handleSubmit CORRIGIDA PARA CONTAGEM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -957,11 +963,17 @@ export default function Movimentacoes() {
         return
       }
 
-      // 🆕 VALIDAÇÃO ESPECÍFICA PARA SAÍDA COM CÓDIGO SELECIONADO
+      // 🆕 VALIDAÇÃO ESPECÍFICA PARA SAÍDA COM CÓDIGO SELECIONADO E CONTAGEM
       if (formData.tipo === 'saida' && codigoSelecionado) {
-        // Verificar se o código específico ainda existe no produto
-        if (!produtoSelecionado.codigosBarras.includes(codigoSelecionado)) {
-          toast.error('Código não encontrado', 'Este código de barras não está mais disponível no produto!')
+        const quantidadeDisponivel = produtoSelecionado.codigosBarras[codigoSelecionado] || 0
+        
+        if (quantidadeDisponivel === 0) {
+          toast.error('Código não disponível', 'Este código de barras não possui unidades disponíveis!')
+          return
+        }
+        
+        if (quantidade > quantidadeDisponivel) {
+          toast.error('Quantidade insuficiente', `Este código tem apenas ${quantidadeDisponivel} unidade(s) disponível(eis)`)
           return
         }
       }
@@ -982,16 +994,16 @@ export default function Movimentacoes() {
 
       const valorUnitario = formData.tipo === 'entrada' ? produtoSelecionado.valorCompra : produtoSelecionado.valorVenda
 
-      // 🆕 OBSERVAÇÃO COM CÓDIGO ESPECÍFICO E NOVOS CÓDIGOS
+      // 🆕 OBSERVAÇÃO COM CÓDIGOS E CONTAGEM
       let observacao = formData.observacao
       if (codigoSelecionado && codigoSelecionado !== produtoSelecionado.codigo) {
         observacao = `${observacao ? observacao + ' - ' : ''}Código usado: ${codigoSelecionado}`.trim()
       }
-      if (formData.tipo === 'entrada' && novosCodigosEntrada.length > 0) {
-        observacao = `${observacao ? observacao + ' - ' : ''}Novos códigos: ${novosCodigosEntrada.length}`.trim()
+      if (formData.tipo === 'entrada' && Object.keys(novosCodigosEntrada).length > 0) {
+        const totalNovosCodigos = Object.values(novosCodigosEntrada).reduce((a, b) => a + b, 0)
+        observacao = `${observacao ? observacao + ' - ' : ''}Novos códigos: ${Object.keys(novosCodigosEntrada).length} tipos, ${totalNovosCodigos} unidades`.trim()
       }
 
-      // 🆕 CAMPOS OBRIGATÓRIOS
       const novaMovimentacaoBase = {
         produto: produtoSelecionado.nome,
         codigo: produtoSelecionado.codigo,
@@ -1009,14 +1021,12 @@ export default function Movimentacoes() {
         userId: user.uid
       }
 
-      // 🆕 CAMPOS OPCIONAIS
       const camposOpcionais: Partial<Movimentacao> = {}
 
       if (codigoSelecionado && codigoSelecionado.trim() !== '') {
         camposOpcionais.codigoBarrasUsado = codigoSelecionado
       }
 
-      // 🆕 COMBINAR E FILTRAR UNDEFINED
       const novaMovimentacao = { ...novaMovimentacaoBase, ...camposOpcionais }
       const movimentacaoLimpa = Object.fromEntries(
         Object.entries(novaMovimentacao).filter(([_, value]) => value !== undefined)
@@ -1024,43 +1034,57 @@ export default function Movimentacoes() {
 
       console.log('Movimentação a ser salva:', movimentacaoLimpa)
 
-      // 🆕 ATUALIZAÇÃO DO PRODUTO COM LÓGICA DE CÓDIGOS
+      // 🆕 ATUALIZAÇÃO DO PRODUTO COM LÓGICA DE CONTAGEM CORRIGIDA
       let produtoAtualizado = { ...produtoSelecionado, estoque: novoEstoque }
 
       if (formData.tipo === 'entrada') {
-        // 🆕 ENTRADA: ADICIONAR NOVOS CÓDIGOS AO PRODUTO
-        if (novosCodigosEntrada.length > 0) {
-          const codigosExistentes = produtoAtualizado.codigosBarras || []
-          const novosCodigosLimpos = novosCodigosEntrada.filter(codigo => !codigosExistentes.includes(codigo))
+        // 🆕 ENTRADA: INCREMENTAR CONTAGENS DOS CÓDIGOS
+        if (Object.keys(novosCodigosEntrada).length > 0) {
+          const codigosExistentes = { ...produtoAtualizado.codigosBarras }
           
-          produtoAtualizado.codigosBarras = [...codigosExistentes, ...novosCodigosLimpos]
+          // Incrementar/adicionar códigos
+          Object.entries(novosCodigosEntrada).forEach(([codigo, quantidade]) => {
+            codigosExistentes[codigo] = (codigosExistentes[codigo] || 0) + quantidade
+          })
+          
+          produtoAtualizado.codigosBarras = codigosExistentes
           produtoAtualizado.temCodigoBarras = true
           
-          console.log('Códigos adicionados ao produto:', novosCodigosLimpos)
+          console.log('Códigos incrementados no produto:', novosCodigosEntrada)
+          console.log('Códigos finais do produto:', codigosExistentes)
         }
       } else if (formData.tipo === 'saida' && codigoSelecionado) {
-        // 🆕 SAÍDA: REMOVER CÓDIGO ESPECÍFICO DO PRODUTO
-        const codigosAtualizados = produtoAtualizado.codigosBarras.filter(codigo => codigo !== codigoSelecionado)
+        // 🆕 SAÍDA: DECREMENTAR APENAS UMA UNIDADE DO CÓDIGO ESPECÍFICO
+        const codigosAtualizados = { ...produtoAtualizado.codigosBarras }
+        
+        if (codigosAtualizados[codigoSelecionado]) {
+          if (codigosAtualizados[codigoSelecionado] > 1) {
+            // Diminuir quantidade
+            codigosAtualizados[codigoSelecionado] -= 1
+          } else {
+            // Remover código se chegou a 0
+            delete codigosAtualizados[codigoSelecionado]
+          }
+        }
         
         produtoAtualizado.codigosBarras = codigosAtualizados
         
         // Se não sobrou nenhum código, marcar como sem código
-        if (codigosAtualizados.length === 0) {
+        if (Object.keys(codigosAtualizados).length === 0) {
           produtoAtualizado.temCodigoBarras = false
         }
         
-        console.log('Código removido do produto:', codigoSelecionado)
+        console.log('Código decrementado:', codigoSelecionado)
         console.log('Códigos restantes:', codigosAtualizados)
       }
 
-      // Salvar movimentação e atualizar produto
       await addMovimentacao(movimentacaoLimpa)
       await updateProduto(produtoSelecionado.id, produtoAtualizado)
 
       const tipoTexto = formData.tipo === 'entrada' ? 'Entrada' : 'Saída'
       const codigoTexto = codigoSelecionado ? ` (Código: ${codigoSelecionado})` : ''
-      const codigosEntradaTexto = formData.tipo === 'entrada' && novosCodigosEntrada.length > 0 
-        ? ` + ${novosCodigosEntrada.length} novos códigos` 
+      const codigosEntradaTexto = formData.tipo === 'entrada' && Object.keys(novosCodigosEntrada).length > 0 
+        ? ` + ${Object.values(novosCodigosEntrada).reduce((a, b) => a + b, 0)} novos códigos` 
         : ''
       
       toast.success(
@@ -1094,12 +1118,11 @@ export default function Movimentacoes() {
           : produto.estoque + movimentacao.quantidade
         
         if (estoqueRevertido >= 0) {
-          // 🆕 REVERTER CÓDIGOS TAMBÉM SE NECESSÁRIO
           let produtoRevertido = { ...produto, estoque: estoqueRevertido }
           
-          // Se foi uma entrada que adicionou códigos, tentar remover (complexo, por isso mantemos simples)
-          // Se foi uma saída que removeu código, tentar re-adicionar (complexo, por isso mantemos simples)
-          // Por simplicidade, apenas revertemos o estoque, mas poderíamos implementar lógica mais complexa
+          // 🆕 REVERTER CÓDIGOS TAMBÉM (SIMPLIFICADO)
+          // Por simplicidade, apenas revertemos o estoque
+          // Em uma versão mais avançada, poderíamos tentar reverter códigos específicos
           
           await updateProduto(produto.id, produtoRevertido)
         }
@@ -1134,23 +1157,20 @@ export default function Movimentacoes() {
     }
   }
 
-  // 🆕 FILTRAR MOVIMENTAÇÕES ATUALIZADO
+  // 🆕 FILTRAR MOVIMENTAÇÕES COM CONTAGEM
   const movimentacoesFiltradas = movimentacoes ? movimentacoes.filter(mov => {
     const matchBusca = mov.produto.toLowerCase().includes(busca.toLowerCase()) ||
                       mov.codigo.toLowerCase().includes(busca.toLowerCase()) ||
                       mov.observacao.toLowerCase().includes(busca.toLowerCase()) ||
-                      // 🆕 BUSCAR POR CÓDIGO DE BARRAS USADO
                       (mov.codigoBarrasUsado && mov.codigoBarrasUsado.toLowerCase().includes(busca.toLowerCase()))
     
     const matchTipo = filtroTipo === '' || mov.tipo === filtroTipo
     const matchData = filtroData === '' || mov.data === filtroData
     const matchProduto = filtroProduto === '' || mov.codigo === filtroProduto
     
-    // 🆕 FILTRO POR CÓDIGO DE BARRAS
     const matchCodigoBarras = filtroCodigoBarras === '' || 
                              (mov.codigoBarrasUsado && mov.codigoBarrasUsado.includes(filtroCodigoBarras))
     
-    // Filtro por categoria
     let matchCategoria = true
     if (filtroCategoria && produtos) {
       const produto = produtos.find(p => p.id === mov.produtoId)
@@ -1165,7 +1185,6 @@ export default function Movimentacoes() {
       }
     }
     
-    // Filtro por período
     let matchPeriodo = true
     if (filtroDataInicio || filtroDataFim) {
       const dataMovParts = mov.data.split('/')
@@ -1201,7 +1220,7 @@ export default function Movimentacoes() {
   const datasUnicas = movimentacoes ? 
     [...new Set(movimentacoes.map(m => m.data))].sort().reverse() : []
 
-  // 🆕 EXPORTAR DADOS ATUALIZADO
+  // 🆕 EXPORTAR DADOS COM CONTAGEM
   const exportarDados = () => {
     if (movimentacoesFiltradas.length === 0) {
       toast.warning('Nenhum dado', 'Não há movimentações para exportar')
@@ -1222,10 +1241,10 @@ export default function Movimentacoes() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `movimentacoes_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`
+    link.download = `movimentacoes_contagem_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`
     link.click()
 
-    toast.success('Dados exportados!', 'Arquivo CSV baixado com múltiplos códigos')
+    toast.success('Dados exportados!', 'Arquivo CSV baixado com sistema de contagem')
   }
 
   const estatisticasCategorias = useMemo(() => {
@@ -1293,7 +1312,7 @@ export default function Movimentacoes() {
                   </div>
                 </div>
                 <p className={`font-bold text-lg ${modoNoturno ? 'text-white' : 'text-gray-700'}`}>Carregando movimentações...</p>
-                <p className={`text-sm mt-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>Sincronizando dados do Firebase</p>
+                <p className={`text-sm mt-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>Sistema de contagem de códigos integrado</p>
               </div>
             </div>
           )}
@@ -1303,10 +1322,10 @@ export default function Movimentacoes() {
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
               <div>
                 <h1 className={`text-2xl sm:text-3xl font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                  📋 Movimentações + Entrada de Códigos
+                  📋 Movimentações com Contagem de Códigos
                 </h1>
                 <p className={`text-sm mt-1 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Sistema completo com entrada e remoção automática de códigos
+                  Sistema completo: entrada incrementa + saída decrementa unidades por código
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
@@ -1343,7 +1362,7 @@ export default function Movimentacoes() {
                     Nenhum produto ativo encontrado
                   </h3>
                   <div className={`mt-2 text-sm ${modoNoturno ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                    <p>Para registrar movimentações, você precisa ter produtos ativos cadastrados.</p>
+                    <p>Para registrar movimentações com contagem de códigos, você precisa ter produtos ativos cadastrados.</p>
                   </div>
                   <div className="mt-4">
                     <LoadingButton
@@ -1589,13 +1608,13 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 FORMULÁRIO COMPLETO COM ENTRADA DE CÓDIGOS */}
+          {/* 🆕 FORMULÁRIO COMPLETO COM CONTAGEM CORRIGIDA */}
           {showForm && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className={`rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                 <div className={`flex justify-between items-center p-6 border-b ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
                   <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                    ➕ {formData.tipo === 'entrada' ? 'Entrada com Novos Códigos' : 'Saída com Remoção de Código'}
+                    ➕ {formData.tipo === 'entrada' ? 'Entrada: Incrementa Contagem' : 'Saída: Decrementa Contagem'}
                   </h3>
                   <button
                     onClick={resetForm}
@@ -1643,7 +1662,7 @@ export default function Movimentacoes() {
                         }`}
                         disabled={loading}
                       >
-                        📥 Entrada + Códigos
+                        📥 Entrada + Incrementa Códigos
                       </button>
                       <button
                         type="button"
@@ -1657,12 +1676,12 @@ export default function Movimentacoes() {
                         }`}
                         disabled={loading}
                       >
-                        📤 Saída - Remove Código
+                        📤 Saída - Decrementa Códigos
                       </button>
                     </div>
                   </div>
 
-                  {/* 🆕 GERENCIADOR DE CÓDIGOS PARA ENTRADA */}
+                  {/* 🆕 GERENCIADOR DE CÓDIGOS CORRIGIDO PARA ENTRADA */}
                   {formData.tipo === 'entrada' && produtoSelecionado && (
                     <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-lg p-6">
                       <GerenciadorCodigosBarras
@@ -1670,6 +1689,25 @@ export default function Movimentacoes() {
                         onCodigosChange={setNovosCodigosEntrada}
                         disabled={loading}
                       />
+                    </div>
+                  )}
+
+                  {/* 🆕 ALERTA DE QUANTIDADE DISPONÍVEL PARA SAÍDA */}
+                  {formData.tipo === 'saida' && produtoSelecionado && codigoSelecionado && (
+                    <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
+                      <h4 className="text-lg font-bold text-orange-900 mb-3">📱 Código Selecionado</h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between p-3 bg-white rounded border">
+                          <span className="font-mono text-gray-900">{codigoSelecionado}</span>
+                          <span className="font-bold text-green-600 bg-green-100 px-3 py-1 rounded">
+                            {produtoSelecionado.codigosBarras[codigoSelecionado] || 0} unidades disponíveis
+                          </span>
+                        </div>
+                        <div className="text-sm text-orange-700 bg-orange-100 p-2 rounded">
+                          <strong>💡 Sistema inteligente:</strong> Cada saída decrementa apenas 1 unidade deste código específico.
+                          Quando chegar a 0, o código será removido automaticamente do produto.
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1693,17 +1731,24 @@ export default function Movimentacoes() {
                       disabled={loading}
                     />
                     
+                    {/* 🆕 VALIDAÇÕES ESPECÍFICAS PARA CONTAGEM */}
                     {produtoSelecionado && formData.tipo === 'saida' && formData.quantidade && (
                       <div className="mt-2">
                         {parseInt(formData.quantidade) > produtoSelecionado.estoque ? (
                           <div className="text-red-600 text-sm bg-red-50 p-2 rounded border border-red-200">
                             ⚠️ Quantidade maior que estoque disponível ({produtoSelecionado.estoque} unidades)
                           </div>
+                        ) : codigoSelecionado && parseInt(formData.quantidade) > (produtoSelecionado.codigosBarras[codigoSelecionado] || 0) ? (
+                          <div className="text-red-600 text-sm bg-red-50 p-2 rounded border border-red-200">
+                            ⚠️ Este código tem apenas {produtoSelecionado.codigosBarras[codigoSelecionado] || 0} unidade(s) disponível(eis)
+                          </div>
                         ) : (
                           <div className="text-green-600 text-sm bg-green-50 p-2 rounded border border-green-200">
-                            ✅ Estoque suficiente. Restará {produtoSelecionado.estoque - parseInt(formData.quantidade)} unidades
+                            ✅ Operação válida. Estoque: {produtoSelecionado.estoque} → {produtoSelecionado.estoque - parseInt(formData.quantidade)}
                             {codigoSelecionado && (
-                              <span className="block mt-1">📱 Código {codigoSelecionado} será removido do produto</span>
+                              <span className="block mt-1">
+                                📱 Código {codigoSelecionado}: {produtoSelecionado.codigosBarras[codigoSelecionado]} → {Math.max(0, (produtoSelecionado.codigosBarras[codigoSelecionado] || 0) - parseInt(formData.quantidade))} unidades
+                              </span>
                             )}
                           </div>
                         )}
@@ -1730,11 +1775,11 @@ export default function Movimentacoes() {
                     />
                   </div>
 
-                  {/* 🆕 RESUMO COMPLETO DA MOVIMENTAÇÃO */}
+                  {/* 🆕 RESUMO COMPLETO COM CONTAGEM */}
                   {produtoSelecionado && formData.quantidade && (
                     <div className="bg-gradient-to-r from-green-100 via-blue-100 to-purple-100 p-5 rounded-lg border-4 border-green-500 shadow-lg animate-fade-in">
                       <h4 className="font-bold text-gray-900 mb-3 text-lg flex items-center">
-                        💰 <span className="ml-2">Resumo da Movimentação:</span>
+                        💰 <span className="ml-2">Resumo com Sistema de Contagem:</span>
                       </h4>
                       {(() => {
                         const quantidade = parseInt(formData.quantidade)
@@ -1764,35 +1809,41 @@ export default function Movimentacoes() {
                                   ? 'bg-green-200 text-green-800' 
                                   : 'bg-red-200 text-red-800'
                               }`}>
-                                {formData.tipo === 'entrada' ? '📥 Entrada' : '�� Saída'}
+                                {formData.tipo === 'entrada' ? '📥 Entrada + Incrementa' : '📤 Saída - Decrementa'}
                               </span>
                             </div>
 
-                            {/* 🆕 CÓDIGOS DA ENTRADA */}
-                            {formData.tipo === 'entrada' && novosCodigosEntrada.length > 0 && (
+                            {/* 🆕 CÓDIGOS DA ENTRADA COM CONTAGEM */}
+                            {formData.tipo === 'entrada' && Object.keys(novosCodigosEntrada).length > 0 && (
                               <div className="p-3 bg-blue-50 bg-opacity-70 rounded-lg border border-blue-200">
-                                <span className="text-blue-800 font-medium block mb-2">📱 Novos códigos a serem adicionados:</span>
-                                <div className="grid grid-cols-2 gap-1">
-                                  {novosCodigosEntrada.slice(0, 6).map((codigo, index) => (
-                                    <span key={index} className="font-mono text-xs text-blue-600 bg-blue-100 px-1 py-0.5 rounded">
-                                      {codigo}
-                                    </span>
+                                <span className="text-blue-800 font-medium block mb-2">📱 Códigos a incrementar:</span>
+                                <div className="space-y-1">
+                                  {Object.entries(novosCodigosEntrada).slice(0, 4).map(([codigo, qtd]) => (
+                                    <div key={codigo} className="flex justify-between items-center bg-blue-100 px-2 py-1 rounded text-xs">
+                                      <span className="font-mono text-blue-600">{codigo}</span>
+                                      <span className="font-bold text-green-600">+{qtd} unidades</span>
+                                    </div>
                                   ))}
-                                  {novosCodigosEntrada.length > 6 && (
+                                  {Object.keys(novosCodigosEntrada).length > 4 && (
                                     <span className="text-xs text-blue-600">
-                                      +{novosCodigosEntrada.length - 6} códigos
+                                      +{Object.keys(novosCodigosEntrada).length - 4} códigos adicionais
                                     </span>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* 🆕 CÓDIGO ESPECÍFICO DA SAÍDA */}
+                            {/* 🆕 CÓDIGO ESPECÍFICO DA SAÍDA COM CONTAGEM */}
                             {formData.tipo === 'saida' && codigoSelecionado && (
                               <div className="p-2 bg-red-50 bg-opacity-70 rounded-lg border border-red-200">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-red-800 font-medium">🗑️ Código a ser removido:</span>
-                                  <span className="font-mono text-red-600 bg-red-100 px-2 py-1 rounded">📱 {codigoSelecionado}</span>
+                                  <span className="text-red-800 font-medium">📉 Código a decrementar:</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono text-red-600 bg-red-100 px-2 py-1 rounded">📱 {codigoSelecionado}</span>
+                                    <span className="text-red-600 font-bold">
+                                      -{quantidade} unidade(s)
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -1811,10 +1862,10 @@ export default function Movimentacoes() {
                             </div>
                             <div className="bg-yellow-100 border-l-4 border-yellow-500 p-3 rounded-r-lg">
                               <p className="text-sm text-yellow-800 font-medium">
-                                💡 <strong>Sistema automatizado:</strong> 
+                                💡 <strong>Sistema de contagem inteligente:</strong> 
                                 {formData.tipo === 'entrada' 
-                                  ? ` Códigos serão adicionados ao produto automaticamente`
-                                  : ` Código específico será removido do produto automaticamente`
+                                  ? ` Códigos serão incrementados no produto automaticamente`
+                                  : ` Apenas 1 unidade do código específico será decrementada`
                                 }
                               </p>
                             </div>
@@ -1852,11 +1903,11 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* Lista de movimentações (VERSÃO REDUZIDA - MANTIDA ORIGINAL) */}
+          {/* Lista de movimentações (MANTIDA IGUAL) */}
           {!isLoadingData && (
             <div className={`rounded-xl shadow-lg overflow-hidden transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
               <div className={`px-6 py-4 border-b flex justify-between items-center ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
-                <h3 className={`text-lg font-semibold ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📋 Histórico Completo</h3>
+                <h3 className={`text-lg font-semibold ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📋 Histórico com Contagem</h3>
                 {movimentacoesFiltradas.length > 0 && (
                   <div className="flex items-center space-x-2">
                     <input
@@ -1884,7 +1935,7 @@ export default function Movimentacoes() {
                   <h3 className={`text-lg font-medium mb-2 ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>Nenhuma movimentação encontrada</h3>
                   <p className={`mb-4 ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
                     {!movimentacoes || movimentacoes.length === 0 
-                      ? 'Comece registrando movimentações com entrada e remoção automática de códigos.'
+                      ? 'Comece registrando movimentações com sistema de contagem inteligente.'
                       : 'Tente ajustar os filtros para encontrar as movimentações desejadas.'
                     }
                   </p>
@@ -1901,7 +1952,7 @@ export default function Movimentacoes() {
                 </div>
               ) : (
                 <>
-                  {/* Versão Mobile - Cards Simplificada */}
+                  {/* Versão Mobile - Cards */}
                   <div className="block sm:hidden">
                     <div className={`divide-y ${modoNoturno ? 'divide-gray-700' : 'divide-gray-200'}`}>
                       {movimentacoesFiltradas.slice(0, 20).map((mov) => {
@@ -1978,7 +2029,7 @@ export default function Movimentacoes() {
                     </div>
                   </div>
 
-                  {/* Versão Desktop - Tabela Resumida */}
+                  {/* Versão Desktop - Tabela */}
                   <div className="hidden sm:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className={modoNoturno ? 'bg-gray-700' : 'bg-gray-50'}>
@@ -2049,7 +2100,7 @@ export default function Movimentacoes() {
                                   ? 'bg-green-100 text-green-800' 
                                   : 'bg-red-100 text-red-800'
                               }`}>
-                                {mov.tipo === 'entrada' ? '��' : '��'}
+                                {mov.tipo === 'entrada' ? '📥' : '📤'}
                               </span>
                             </td>
                             <td className={`px-6 py-4 whitespace-nowrap text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-900'}`}>
@@ -2093,30 +2144,32 @@ export default function Movimentacoes() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES FINAIS ATUALIZADAS */}
+          {/* 🆕 INFORMAÇÕES FINAIS COM SISTEMA DE CONTAGEM */}
           {!isLoadingData && (
             <div className={`mt-8 border rounded-xl p-4 transition-colors duration-300 ${
               modoNoturno ? 'bg-green-900 border-green-700' : 'bg-green-50 border-green-200'
             }`}>
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <div className="text-2xl">🚀</div>
+                  <div className="text-2xl">🎯</div>
                 </div>
                 <div className="ml-3">
                   <h3 className={`text-sm font-medium ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
-                    Sistema Completo: Entrada com Códigos + Remoção Automática
+                    Sistema Perfeito: Contagem Inteligente de Códigos
                   </h3>
                   <div className={`mt-2 text-sm space-y-1 ${modoNoturno ? 'text-green-300' : 'text-green-700'}`}>
-                    <p>• <strong>📥 Entrada inteligente:</strong> Cadastre múltiplos códigos de barras durante a entrada</p>
-                    <p>• <strong>📱 Scanner integrado:</strong> Bipagem e replicação de códigos para múltiplas unidades</p>
-                    <p>• <strong>🗑️ Remoção automática:</strong> Códigos específicos são removidos do produto na saída</p>
-                    <p>• <strong>🔄 Controle granular:</strong> Rastreamento completo de qual código foi usado</p>
-                    <p>• <strong>🎯 Validação inteligente:</strong> Sistema verifica disponibilidade dos códigos</p>
-                    <p>• <strong>📊 Relatórios detalhados:</strong> Histórico completo com códigos específicos</p>
-                    <p>• <strong>⚡ Automatização total:</strong> Sem trabalho manual para gerenciar códigos</p>
-                    <p>• <strong>🔍 Filtros avançados:</strong> Busque por códigos específicos utilizados</p>
-                    <p>• <strong>📋 Exportação completa:</strong> CSV com dados detalhados dos códigos</p>
-                    <p>• <strong>🏆 Controle perfeito:</strong> Solução completa para múltiplos códigos de barras</p>
+                    <p>• <strong>🔢 Contagem granular:</strong> Cada código registra quantas unidades existem</p>
+                    <p>• <strong>📥 Entrada inteligente:</strong> Incrementa contadores de códigos específicos</p>
+                    <p>• <strong>📤 Saída precisa:</strong> Decrementa apenas 1 unidade do código usado</p>
+                    <p>• <strong>🔄 Remoção automática:</strong> Códigos são removidos quando chegam a 0 unidades</p>
+                    <p>• <strong>📱 Scanner integrado:</strong> Bipagem com controle de quantidade por código</p>
+                    <p>• <strong>✅ Validação rigorosa:</strong> Sistema verifica disponibilidade antes da operação</p>
+                    <p>• <strong>🎯 Seleção específica:</strong> Escolha exata de qual código usar na saída</p>
+                    <p>• <strong>📊 Rastreamento completo:</strong> Histórico detalhado de cada código utilizado</p>
+                    <p>• <strong>🔍 Busca avançada:</strong> Filtros por códigos específicos utilizados</p>
+                    <p>• <strong>📋 Exportação completa:</strong> CSV com dados detalhados de contagem</p>
+                    <p>• <strong>⚡ Performance otimizada:</strong> Sistema eficiente para grandes volumes</p>
+                    <p>• <strong>🏆 Solução definitiva:</strong> Controle perfeito de múltiplos códigos de barras</p>
                   </div>
                 </div>
               </div>
