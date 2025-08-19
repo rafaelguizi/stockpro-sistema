@@ -4,9 +4,12 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFirestore } from '@/hooks/useFirestore'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useFormattedValues } from '@/hooks/useFormattedValues'
 import { useToastContext } from '@/components/ToastProvider'
 import MobileHeader from '@/components/MobileHeader'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import PermissionGuard, { SensitiveInfo, AdminOnly, RoleBasedContent } from '@/components/PermissionGuard'
 
 interface Produto {
   id: string
@@ -49,6 +52,8 @@ type FiltroAtivo = 'todos' | 'estoque_baixo' | 'estoque_zerado' | 'proximo_venci
 export default function Dashboard() {
   const router = useRouter()
   const { user } = useAuth()
+  const { permissions, limits } = usePermissions()
+  const { formatCurrency, formatSensitiveCurrency, formatProfit, canViewCosts, canViewProfits } = useFormattedValues()
   const toast = useToastContext()
   
   // 🆕 Hooks Multi-tenant
@@ -323,31 +328,57 @@ export default function Dashboard() {
                     {user && (
                       <div className="text-purple-200 text-sm mt-1 space-y-1">
                         <p>Logado como: <span className="font-semibold">{user.email}</span></p>
+                        {/* 🆕 MOSTRAR ROLE DO USUÁRIO */}
+                        <p>Perfil: <span className="font-semibold">
+                          {user.role === 'COMPANY_ADMIN' && '👑 Administrador'}
+                          {(user.role === 'EMPLOYEE' || user.role === 'COMPANY_USER') && '👤 Funcionário'}
+                          {user.role === 'SUPER_ADMIN' && '🛡️ Super Admin'}
+                        </span></p>
                         {user.isMultiTenant && user.companyName && (
                           <p>Empresa: <span className="font-semibold">{user.companyName}</span></p>
                         )}
                         {user.isMultiTenant && (
                           <p className="text-purple-300 text-xs">🏢 Dados isolados por empresa</p>
                         )}
+                        {/* 🆕 MOSTRAR LIMITES PARA FUNCIONÁRIOS */}
+                        {!canViewCosts && (
+                          <p className="text-purple-300 text-xs">🔒 Interface simplificada para funcionários</p>
+                        )}
                       </div>
                     )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-                    <button
-                      onClick={() => router.push('/produtos')}
-                      className="px-6 py-3 bg-white text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
-                    >
-                      <span className="text-xl">➕</span>
-                      <span>Novo Produto</span>
-                    </button>
-                    <button
-                      onClick={() => router.push('/movimentacoes')}
-                      className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
-                    >
-                      <span className="text-xl">📋</span>
-                      <span>Nova Movimentação</span>
-                    </button>
+                    {/* 🆕 BOTÃO GESTÃO DE EQUIPE - APENAS PARA ADMINS */}
+                    <AdminOnly>
+                      <button
+                        onClick={() => router.push('/equipe')}
+                        className="px-6 py-3 bg-white text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                      >
+                        <span className="text-xl">👥</span>
+                        <span>Equipe</span>
+                      </button>
+                    </AdminOnly>
+
+                    <PermissionGuard permission="canCreateProducts">
+                      <button
+                        onClick={() => router.push('/produtos')}
+                        className="px-6 py-3 bg-white text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                      >
+                        <span className="text-xl">➕</span>
+                        <span>Novo Produto</span>
+                      </button>
+                    </PermissionGuard>
+
+                    <PermissionGuard permission="canAccessPDV">
+                      <button
+                        onClick={() => router.push('/movimentacoes')}
+                        className="px-6 py-3 bg-white text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-2 border-white rounded-xl font-bold transition-all duration-200 transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+                      >
+                        <span className="text-xl">📋</span>
+                        <span>Nova Movimentação</span>
+                      </button>
+                    </PermissionGuard>
                   </div>
                 </div>
               </div>
@@ -431,17 +462,33 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Faturamento Mensal - Não clicável */}
-                <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="text-green-100 text-sm">Faturamento</p>
-                      <p className="text-xl font-bold">R$ {faturamentoMensal.totalFaturamento.toFixed(2)}</p>
-                      <p className="text-green-100 text-xs">{faturamentoMensal.quantidadeVendas} vendas</p>
+                {/* 🆕 FATURAMENTO MENSAL - COM CONTROLE DE PERMISSÃO */}
+                <RoleBasedContent
+                  adminContent={
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-green-100 text-sm">Faturamento</p>
+                          <p className="text-xl font-bold">{formatProfit(faturamentoMensal.totalFaturamento)}</p>
+                          <p className="text-green-100 text-xs">{faturamentoMensal.quantidadeVendas} vendas</p>
+                        </div>
+                        <div className="text-4xl ml-3">💰</div>
+                      </div>
                     </div>
-                    <div className="text-4xl ml-3">💰</div>
-                  </div>
-                </div>
+                  }
+                  employeeContent={
+                    <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-green-100 text-sm">Vendas do Mês</p>
+                          <p className="text-3xl font-bold">{faturamentoMensal.quantidadeVendas}</p>
+                          <p className="text-green-100 text-xs">Total de vendas</p>
+                        </div>
+                        <div className="text-4xl ml-3">📊</div>
+                      </div>
+                    </div>
+                  }
+                />
               </div>
 
               {/* 🆕 ALERTAS FILTRÁVEIS - Baseado no filtro ativo */}
@@ -673,11 +720,19 @@ export default function Dashboard() {
                     <p className="text-blue-600 font-semibold">Produtos Ativos</p>
                   </div>
 
+                  {/* 🆕 VALOR DO ESTOQUE - COM CONTROLE DE PERMISSÃO */}
                   <div className="text-center p-6 bg-green-50 rounded-xl border border-green-200">
-                    <p className="text-xl font-bold text-green-600">
-                      R$ {valorTotalEstoque.toFixed(2)}
-                    </p>
-                    <p className="text-green-600 font-semibold">Valor do Estoque</p>
+                    <SensitiveInfo fallback={
+                      <div>
+                        <p className="text-xl font-bold text-green-600">---</p>
+                        <p className="text-green-600 font-semibold">Valor Restrito</p>
+                      </div>
+                    }>
+                      <p className="text-xl font-bold text-green-600">
+                        {formatSensitiveCurrency(valorTotalEstoque)}
+                      </p>
+                      <p className="text-green-600 font-semibold">Valor do Estoque</p>
+                    </SensitiveInfo>
                   </div>
 
                   <div className="text-center p-6 bg-purple-50 rounded-xl border border-purple-200">
@@ -694,7 +749,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Informações sobre o sistema */}
+              {/* 🆕 INFORMAÇÕES SOBRE O SISTEMA - COM PERMISSÕES */}
               <div className="mt-8 bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6">
                 <div className="flex items-start space-x-4">
                   <div className="text-3xl">💡</div>
@@ -711,14 +766,36 @@ export default function Dashboard() {
                         </>
                       ) : (
                         <>
-                          <p>• O faturamento é calculado apenas com as <strong>vendas (saídas)</strong> do mês atual</p>
-                          <p>• Automaticamente zera todo dia 1º do mês para um novo ciclo</p>
-                          <p>• Para análises históricas, use a aba <strong>Relatórios</strong> com períodos personalizados</p>
-                          <p>• O lucro líquido detalhado está disponível nos relatórios</p>
+                          <PermissionGuard permission="canViewProfits">
+                            <p>• O faturamento é calculado apenas com as <strong>vendas (saídas)</strong> do mês atual</p>
+                            <p>• Automaticamente zera todo dia 1º do mês para um novo ciclo</p>
+                            <p>• Para análises históricas, use a aba <strong>Relatórios</strong> com períodos personalizados</p>
+                            <p>• O lucro líquido detalhado está disponível nos relatórios</p>
+                          </PermissionGuard>
                         </>
                       )}
                       <p>• <strong>🆕 Cards filtráveis:</strong> Clique nos cards de alertas para filtrar visualizações específicas</p>
                       <p>• Todos os dados são sincronizados em tempo real com o Firebase</p>
+                      
+                      {/* 🆕 INFORMAÇÕES ESPECÍFICAS PARA FUNCIONÁRIOS */}
+                      {!canViewCosts && (
+                        <div className="bg-blue-100 p-3 rounded-lg mt-3">
+                          <p className="font-semibold text-blue-800">👤 Informações para Funcionários:</p>
+                          <p>• Interface simplificada - valores financeiros sensíveis ocultos</p>
+                          <p>• Acesso completo ao estoque e alertas de produtos</p>
+                          <p>• PDV liberado para vendas com limite de desconto: {limits.maxDiscountPercent}%</p>
+                        </div>
+                      )}
+                      
+                      {/* 🆕 INFORMAÇÕES ESPECÍFICAS PARA ADMINS */}
+                      <AdminOnly>
+                        <div className="bg-purple-100 p-3 rounded-lg mt-3">
+                          <p className="font-semibold text-purple-800">👑 Painel Administrativo:</p>
+                          <p>• Acesse a <strong>Gestão de Equipe</strong> para adicionar funcionários</p>
+                          <p>• Controle total sobre permissões e relatórios financeiros</p>
+                          <p>• Plano atual: <strong>{user?.plan}</strong> - {user?.plan === 'BASIC' ? '3' : user?.plan === 'PRO' ? '10' : '50'} usuários máximo</p>
+                        </div>
+                      </AdminOnly>
                     </div>
                   </div>
                 </div>

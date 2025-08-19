@@ -258,3 +258,37 @@ export function useMultiTenantMovimentacoes(limitTo?: number) {
 export function useMultiTenantMovimentacoesRecentes() {
   return useMultiTenantMovimentacoes(50)
 }
+
+// Adicionar estas funções ao final do useMultiTenantFirestore.ts
+
+// Hook específico para usuários/funcionários multi-tenant
+export function useTeamMembers() {
+  return useMultiTenantFirestore<any>('users', {
+    orderByField: 'createdAt',
+    orderByDirection: 'desc'
+  })
+}
+
+// Hook para clientes multi-tenant
+export function useMultiTenantClientes() {
+  return useMultiTenantFirestore<any>('customers', {
+    orderByField: 'createdAt',
+    orderByDirection: 'desc'
+  })
+}
+
+// Hook para fornecedores multi-tenant
+export function useMultiTenantFornecedores() {
+  return useMultiTenantFirestore<any>('suppliers', {
+    orderByField: 'createdAt',
+    orderByDirection: 'desc'
+  })
+}
+
+// Hook para categorias multi-tenant
+export function useMultiTenantCategorias() {
+  return useMultiTenantFirestore<any>('categories', {
+    orderByField: 'name',
+    orderByDirection: 'asc'
+  })
+}
