@@ -22,13 +22,16 @@ interface CategoriaFirestore {
   userId: string
 }
 
+// 📦 INTERFACE PRODUTO ATUALIZADA
 interface Produto {
   id: string
   codigo: string
   nome: string
   categoria: string
-  categoriaId?: string // 🆕 CATEGORIA FIRESTORE
-  codigoBarras?: string
+  categoriaId?: string
+  codigosBarras: string[]      // 🆕 Array de códigos
+  temCodigoBarras: boolean     // 🆕 Controle se usa código
+  isDestilado: boolean         // 🆕 Bebida sem validade
   estoqueMinimo: number
   valorCompra: number
   valorVenda: number
@@ -62,8 +65,10 @@ interface ItemVenda {
   valorUnitario: number
   valorTotal: number
   desconto?: number
+  codigoBarrasUsado?: string   // 🆕 Qual código foi usado na venda
 }
 
+// 📋 INTERFACE MOVIMENTACAO ATUALIZADA
 interface Movimentacao {
   id: string
   produto: string
@@ -77,7 +82,7 @@ interface Movimentacao {
   hora: string
   observacao: string
   userId: string
-  // Campos para clientes
+  codigoBarrasUsado?: string   // 🆕 Código específico usado
   clienteId?: string
   clienteNome?: string
   clienteCpfCnpj?: string
@@ -96,32 +101,26 @@ export default function PDV() {
   const { user } = useAuth()
   const toast = useToastContext()
 
-  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR (CORRIGIDO - IGUAL DASHBOARD)
+  // 🆕 MARGEM DINÂMICA BASEADA NO ESTADO DA SIDEBAR
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
-  // Escutar mudanças no localStorage para sincronizar
-  const handleStorageChange = () => {
-    const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
-    if (collapsed !== null) { 
-      setSidebarCollapsed(JSON.parse(collapsed))
+    const handleStorageChange = () => {
+      const collapsed = localStorage.getItem('stockpro_sidebar_collapsed')
+      if (collapsed !== null) { 
+        setSidebarCollapsed(JSON.parse(collapsed))
+      }
     }
-  }
 
-  // Verificar estado inicial
-  handleStorageChange()
+    handleStorageChange()
+    window.addEventListener('storage', handleStorageChange)
+    const interval = setInterval(handleStorageChange, 100)
 
-  // Escutar mudanças
-  window.addEventListener('storage', handleStorageChange)
-  
-  // Polling para mudanças na mesma aba (workaround)
-  const interval = setInterval(handleStorageChange, 100)
-
-  return () => {
-    window.removeEventListener('storage', handleStorageChange)
-    clearInterval(interval)
-  }
-}, [])
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [])
   
   // Hooks do Firestore
   const { 
@@ -135,7 +134,6 @@ export default function PDV() {
     loading: loadingClientes 
   } = useFirestore<Cliente>('clientes')
 
-  // 🆕 HOOK PARA CATEGORIAS
   const { 
     data: categorias, 
     loading: loadingCategorias 
@@ -172,15 +170,21 @@ export default function PDV() {
   const [valorPago, setValorPago] = useState<number>(0)
   const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false)
 
-  // 🆕 NOVOS ESTADOS PARA FILTROS POR CATEGORIA
+  // Estados para filtros por categoria
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('')
   const [buscaProduto, setBuscaProduto] = useState('')
   const [mostrarProdutos, setMostrarProdutos] = useState(false)
+
+  // 🆕 ESTADOS PARA PRODUTOS SEM CÓDIGO
+  const [mostrarProdutosSemCodigo, setMostrarProdutosSemCodigo] = useState(false)
+  const [produtoSemCodigoNome, setProdutoSemCodigoNome] = useState('')
+  const [produtoSemCodigoPreco, setProdutoSemCodigoPreco] = useState('')
+  const [produtoSemCodigoQuantidade, setProdutoSemCodigoQuantidade] = useState(1)
   
   const videoRef = useRef<HTMLVideoElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // 🆕 CATEGORIAS ATIVAS PARA FILTRO
+  // Categorias ativas para filtro
   const categoriasAtivas = useMemo(() => {
     return categorias?.filter(cat => cat.ativo).slice(0, 8) || []
   }, [categorias])
@@ -200,7 +204,6 @@ export default function PDV() {
       }
     }
     
-    // Fallback para produtos sem categoria ou não encontrada
     return {
       id: '',
       nome: produto.categoria || 'Geral',
@@ -236,27 +239,23 @@ export default function PDV() {
       )
     }
     
-    return produtosFiltrados.slice(0, 20) // Limitar a 20 produtos
+    return produtosFiltrados.slice(0, 20)
   }, [produtos, categoriaSelecionada, buscaProduto])
+
+  // 🆕 PRODUTOS SEM CÓDIGO DE BARRAS
+  const produtosSemCodigo = useMemo(() => {
+    if (!produtos) return []
+    return produtos.filter(p => p.ativo && !p.temCodigoBarras).slice(0, 10)
+  }, [produtos])
 
   // Auto-focus no input de código de barras
   useEffect(() => {
-    if (inputRef.current && !loadingProdutos && autoFocus && !mostrarProdutos) {
+    if (inputRef.current && !loadingProdutos && autoFocus && !mostrarProdutos && !mostrarProdutosSemCodigo) {
       inputRef.current.focus()
     }
-  }, [loadingProdutos, autoFocus, vendaAtiva, mostrarProdutos])
+  }, [loadingProdutos, autoFocus, vendaAtiva, mostrarProdutos, mostrarProdutosSemCodigo])
 
-  // Auto-focus quando a venda ativa muda
-  useEffect(() => {
-    if (vendaAtiva && inputRef.current && !mostrarProdutos) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus()
-      }, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [vendaAtiva, mostrarProdutos])
-
-  // 🆕 ATALHOS DE TECLADO ATUALIZADOS COM CATEGORIAS
+  // 🆕 ATALHOS DE TECLADO ATUALIZADOS
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       // F1 - Toggle venda ativa
@@ -279,8 +278,16 @@ export default function PDV() {
         e.preventDefault()
         inputRef.current?.focus()
         setMostrarProdutos(false)
+        setMostrarProdutosSemCodigo(false)
       }
-      // 🆕 F5-F9 - Selecionar categorias
+      // 🆕 F10 - Produtos sem código
+      if (e.key === 'F10') {
+        e.preventDefault()
+        setMostrarProdutosSemCodigo(!mostrarProdutosSemCodigo)
+        setMostrarProdutos(false)
+        setCategoriaSelecionada('')
+      }
+      // F5-F9 - Selecionar categorias
       if (e.key === 'F5' && categoriasAtivas[0]) {
         e.preventDefault()
         selecionarCategoria(categoriasAtivas[0].id)
@@ -308,8 +315,9 @@ export default function PDV() {
           setModalPagamentoAberto(false)
         } else if (mostrarListaClientes) {
           setMostrarListaClientes(false)
-        } else if (mostrarProdutos || categoriaSelecionada) {
+        } else if (mostrarProdutos || categoriaSelecionada || mostrarProdutosSemCodigo) {
           setMostrarProdutos(false)
+          setMostrarProdutosSemCodigo(false)
           setCategoriaSelecionada('')
           setBuscaProduto('')
           inputRef.current?.focus()
@@ -322,33 +330,31 @@ export default function PDV() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [vendaAtiva, itensVenda.length, modalPagamentoAberto, mostrarListaClientes, mostrarProdutos, categoriaSelecionada, categoriasAtivas])
+  }, [vendaAtiva, itensVenda.length, modalPagamentoAberto, mostrarListaClientes, mostrarProdutos, mostrarProdutosSemCodigo, categoriaSelecionada, categoriasAtivas])
 
-  // Carregar estatísticas do dia
-  useEffect(() => {
-    if (produtos) {
-      // Simular contadores do dia
-      const hoje = new Date().toLocaleDateString('pt-BR')
-    }
-  }, [produtos])
-
-  // Produtos ativos com código de barras
+  // Produtos ativos
   const produtosAtivos = produtos ? produtos.filter(p => p.ativo) : []
-  const produtosComCodigoBarras = produtosAtivos.filter(p => p.codigoBarras)
+  const produtosComCodigoBarras = produtosAtivos.filter(p => p.temCodigoBarras && p.codigosBarras.length > 0)
 
-  // Buscar produto por código de barras
+  // 🆕 BUSCAR PRODUTO POR CÓDIGO DE BARRAS ATUALIZADA
   const buscarProdutoPorCodigoBarras = (codigoBarras: string) => {
-    return produtosAtivos.find(p => 
-      p.codigoBarras === codigoBarras || 
+    const produtoEncontrado = produtosAtivos.find(p => 
+      p.codigosBarras?.includes(codigoBarras) || 
       p.codigo === codigoBarras
     )
+    
+    return produtoEncontrado ? {
+      produto: produtoEncontrado,
+      codigoUsado: produtoEncontrado.codigosBarras?.includes(codigoBarras) ? codigoBarras : produtoEncontrado.codigo
+    } : null
   }
 
-  // 🆕 FUNÇÃO PARA SELECIONAR CATEGORIA
+  // Função para selecionar categoria
   const selecionarCategoria = (categoriaId: string) => {
     setCategoriaSelecionada(categoriaId)
     setBuscaProduto('')
     setMostrarProdutos(true)
+    setMostrarProdutosSemCodigo(false)
     
     const categoria = categorias?.find(cat => cat.id === categoriaId)
     if (categoria) {
@@ -356,20 +362,74 @@ export default function PDV() {
     }
   }
 
-  // 🆕 FUNÇÃO PARA ADICIONAR PRODUTO DIRETAMENTE DA LISTA
-  const adicionarProdutoDaLista = async (produto: Produto) => {
-    await adicionarProdutoVenda(produto)
+  // 🆕 FUNÇÃO PARA ADICIONAR PRODUTO DA LISTA ATUALIZADA
+  const adicionarProdutoDaLista = async (produto: Produto, codigoEspecifico?: string) => {
+    await adicionarProdutoVenda(produto, 1, codigoEspecifico)
     
-    // Se não estiver em venda ativa, fechar a lista de produtos
     if (!vendaAtiva) {
       setMostrarProdutos(false)
+      setMostrarProdutosSemCodigo(false)
       setCategoriaSelecionada('')
       setBuscaProduto('')
       
-      // Focar de volta no input
       setTimeout(() => {
         inputRef.current?.focus()
       }, 100)
+    }
+  }
+
+  // 🆕 FUNÇÃO PARA ADICIONAR PRODUTO SEM CÓDIGO
+  const adicionarProdutoSemCodigo = async () => {
+    if (!produtoSemCodigoNome.trim() || !produtoSemCodigoPreco || produtoSemCodigoQuantidade <= 0) {
+      toast.error('Dados incompletos', 'Preencha nome, preço e quantidade!')
+      return
+    }
+
+    const preco = parseFloat(produtoSemCodigoPreco)
+    if (preco <= 0) {
+      toast.error('Preço inválido', 'O preço deve ser maior que zero!')
+      return
+    }
+
+    // Criar produto temporário
+    const produtoTemporario: Produto = {
+      id: `temp_${Date.now()}`,
+      codigo: `TEMP${Date.now()}`,
+      nome: produtoSemCodigoNome,
+      categoria: 'Produtos Avulsos',
+      codigosBarras: [],
+      temCodigoBarras: false,
+      isDestilado: false,
+      estoqueMinimo: 0,
+      valorCompra: preco * 0.7, // Margem estimada
+      valorVenda: preco,
+      estoque: 999999, // Estoque "infinito" para produtos avulsos
+      ativo: true,
+      dataCadastro: new Date().toLocaleDateString('pt-BR'),
+      userId: user?.uid || ''
+    }
+
+    const novoItem: ItemVenda = {
+      produto: produtoTemporario,
+      quantidade: produtoSemCodigoQuantidade,
+      valorUnitario: preco,
+      valorTotal: preco * produtoSemCodigoQuantidade,
+      desconto: 0,
+      codigoBarrasUsado: 'PRODUTO_AVULSO'
+    }
+
+    setItensVenda([...itensVenda, novoItem])
+
+    // Limpar campos
+    setProdutoSemCodigoNome('')
+    setProdutoSemCodigoPreco('')
+    setProdutoSemCodigoQuantidade(1)
+
+    playSound('success')
+    toast.success('Produto avulso adicionado!', `${produtoSemCodigoNome} - ${produtoSemCodigoQuantidade}x`)
+
+    if (!vendaAtiva) {
+      setMostrarProdutosSemCodigo(false)
     }
   }
 
@@ -436,7 +496,6 @@ export default function PDV() {
     setBuscarCliente(cliente.nome)
     setMostrarListaClientes(false)
     
-    // Aplicar desconto para clientes cadastrados (5%)
     if (descontoPercentual === 0) {
       setDescontoPercentual(5)
       toast.success('Cliente selecionado!', `Desconto de 5% aplicado para ${cliente.nome}`)
@@ -457,17 +516,20 @@ export default function PDV() {
     toast.info('Cliente removido', 'Desconto de cliente removido')
   }, [formaPagamento, toast])
 
-  // Adicionar produto à venda (mantido original)
-  const adicionarProdutoVenda = async (produto: Produto, quantidade: number = 1) => {
-    if (produto.estoque < quantidade) {
+  // 🆕 ADICIONAR PRODUTO À VENDA ATUALIZADA
+  const adicionarProdutoVenda = async (produto: Produto, quantidade: number = 1, codigoBarrasUsado?: string) => {
+    if (produto.estoque < quantidade && produto.id.indexOf('temp_') !== 0) {
       playSound('error')
       toast.error('Estoque insuficiente', `Disponível: ${produto.estoque} unidades`)
       return
     }
 
-    const itemExistente = itensVenda.find(item => item.produto.id === produto.id)
+    const itemExistente = itensVenda.find(item => 
+      item.produto.id === produto.id && 
+      item.codigoBarrasUsado === codigoBarrasUsado
+    )
     
-    if (itemExistente) {
+    if (itemExistente && produto.id.indexOf('temp_') !== 0) {
       const novaQuantidade = itemExistente.quantidade + quantidade
       if (produto.estoque < novaQuantidade) {
         playSound('error')
@@ -476,7 +538,7 @@ export default function PDV() {
       }
       
       setItensVenda(itensVenda.map(item => 
-        item.produto.id === produto.id 
+        item.produto.id === produto.id && item.codigoBarrasUsado === codigoBarrasUsado
           ? {
               ...item,
               quantidade: novaQuantidade,
@@ -490,7 +552,8 @@ export default function PDV() {
         quantidade,
         valorUnitario: produto.valorVenda,
         valorTotal: produto.valorVenda * quantidade,
-        desconto: 0
+        desconto: 0,
+        codigoBarrasUsado
       }
       setItensVenda([...itensVenda, novoItem])
     }
@@ -499,7 +562,7 @@ export default function PDV() {
     toast.success('Produto adicionado!', `${produto.nome} - ${quantidade}x`)
   }
 
-  // Processar código de barras (mantido original)
+  // 🆕 PROCESSAR CÓDIGO DE BARRAS ATUALIZADA
   const processarCodigoBarras = async (codigoBarras: string) => {
     if (!codigoBarras.trim()) return
 
@@ -507,11 +570,11 @@ export default function PDV() {
     try {
       await new Promise(resolve => setTimeout(resolve, 200))
       
-      const produto = buscarProdutoPorCodigoBarras(codigoBarras.trim())
+      const resultado = buscarProdutoPorCodigoBarras(codigoBarras.trim())
       
-      if (produto) {
+      if (resultado) {
         playSound('scan')
-        await adicionarProdutoVenda(produto)
+        await adicionarProdutoVenda(resultado.produto, 1, resultado.codigoUsado)
         setCodigoBarrasInput('')
         
         if (vendaAtiva) {
@@ -531,20 +594,20 @@ export default function PDV() {
     }
   }
 
-  // Handle do input de código de barras (mantido original)
+  // Handle do input de código de barras
   const handleCodigoBarrasSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     processarCodigoBarras(codigoBarrasInput)
   }
 
-  // Toggle venda ativa (mantido original)
+  // Toggle venda ativa
   const toggleVendaAtiva = () => {
     const novoEstado = !vendaAtiva
     setVendaAtiva(novoEstado)
     
-    // Fechar filtros quando ativar venda
     if (novoEstado) {
       setMostrarProdutos(false)
+      setMostrarProdutosSemCodigo(false)
       setCategoriaSelecionada('')
       setBuscaProduto('')
     }
@@ -562,29 +625,33 @@ export default function PDV() {
     }
   }
 
-  // Remover item da venda (mantido original)
-  const removerItemVenda = (produtoId: string) => {
-    setItensVenda(itensVenda.filter(item => item.produto.id !== produtoId))
+  // Remover item da venda
+  const removerItemVenda = (produtoId: string, codigoBarrasUsado?: string) => {
+    setItensVenda(itensVenda.filter(item => 
+      !(item.produto.id === produtoId && item.codigoBarrasUsado === codigoBarrasUsado)
+    ))
     toast.info('Item removido', 'Produto removido da venda')
   }
 
-  // Alterar quantidade do item (mantido original)
-  const alterarQuantidadeItem = (produtoId: string, novaQuantidade: number) => {
+  // Alterar quantidade do item
+  const alterarQuantidadeItem = (produtoId: string, novaQuantidade: number, codigoBarrasUsado?: string) => {
     if (novaQuantidade <= 0) {
-      removerItemVenda(produtoId)
+      removerItemVenda(produtoId, codigoBarrasUsado)
       return
     }
 
-    const item = itensVenda.find(item => item.produto.id === produtoId)
+    const item = itensVenda.find(item => 
+      item.produto.id === produtoId && item.codigoBarrasUsado === codigoBarrasUsado
+    )
     if (!item) return
 
-    if (item.produto.estoque < novaQuantidade) {
+    if (item.produto.id.indexOf('temp_') !== 0 && item.produto.estoque < novaQuantidade) {
       toast.error('Estoque insuficiente', `Disponível: ${item.produto.estoque} unidades`)
       return
     }
 
     setItensVenda(itensVenda.map(item => 
-      item.produto.id === produtoId 
+      item.produto.id === produtoId && item.codigoBarrasUsado === codigoBarrasUsado
         ? {
             ...item,
             quantidade: novaQuantidade,
@@ -594,10 +661,10 @@ export default function PDV() {
     ))
   }
 
-  // Aplicar desconto em item específico (mantido original)
-  const aplicarDescontoItem = (produtoId: string, desconto: number) => {
+  // Aplicar desconto em item específico
+  const aplicarDescontoItem = (produtoId: string, desconto: number, codigoBarrasUsado?: string) => {
     setItensVenda(itensVenda.map(item => 
-      item.produto.id === produtoId 
+      item.produto.id === produtoId && item.codigoBarrasUsado === codigoBarrasUsado
         ? {
             ...item,
             desconto: Math.max(0, Math.min(desconto, item.valorUnitario * item.quantidade)),
@@ -607,7 +674,7 @@ export default function PDV() {
     ))
   }
 
-  // Finalizar venda (mantido original)
+  // 🆕 FINALIZAR VENDA ATUALIZADA
   const finalizarVenda = async () => {
     if (!user) {
       toast.error('Erro de autenticação', 'Usuário não encontrado!')
@@ -640,7 +707,7 @@ export default function PDV() {
       const totalItens = itensVenda.reduce((total, item) => total + item.quantidade, 0)
       const valorDesconto = obterValorDesconto()
 
-      // Criar movimentações para cada item
+      // 🆕 CRIAR MOVIMENTAÇÕES COM CÓDIGOS ESPECÍFICOS
       const movimentacoesPromises = itensVenda.map(item => {
         let observacao = vendaAtiva 
           ? `Venda PDV - Modo Ativo` 
@@ -649,6 +716,13 @@ export default function PDV() {
         if (clienteSelecionado) observacao += ` - Cliente: ${clienteSelecionado.nome}`
         if (valorDesconto > 0) {
           observacao += ` - Desconto: ${tipoDesconto === 'percentual' ? `${descontoPercentual}%` : `R$ ${descontoTotal.toFixed(2)}`}`
+        }
+
+        // 🆕 ADICIONAR INFORMAÇÃO DO CÓDIGO USADO
+        if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
+          observacao += ` - Código: ${item.codigoBarrasUsado}`
+        } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
+          observacao += ` - Produto Avulso`
         }
 
         const movimentacao: Movimentacao = {
@@ -667,6 +741,7 @@ export default function PDV() {
           }),
           observacao,
           userId: user.uid,
+          codigoBarrasUsado: item.codigoBarrasUsado, // 🆕 CÓDIGO ESPECÍFICO
           clienteId: clienteSelecionado?.id,
           clienteNome: clienteSelecionado?.nome,
           clienteCpfCnpj: clienteSelecionado?.cpfCnpj,
@@ -677,26 +752,23 @@ export default function PDV() {
         return addMovimentacao(movimentacao)
       })
 
-      // Atualizar estoque dos produtos
-      const estoquePromises = itensVenda.map(item => {
-        const novoEstoque = item.produto.estoque - item.quantidade
-        return updateProduto(item.produto.id, { 
-          ...item.produto, 
-          estoque: novoEstoque 
+      // 🆕 ATUALIZAR ESTOQUE APENAS PARA PRODUTOS REAIS
+      const estoquePromises = itensVenda
+        .filter(item => item.produto.id.indexOf('temp_') !== 0) // Não atualizar produtos temporários
+        .map(item => {
+          const novoEstoque = item.produto.estoque - item.quantidade
+          return updateProduto(item.produto.id, { 
+            ...item.produto, 
+            estoque: novoEstoque 
+          })
         })
-      })
 
-      // Executar todas as operações
       await Promise.all([...movimentacoesPromises, ...estoquePromises])
 
-      // Atualizar estatísticas do dia
       setVendasDoDia(prev => prev + 1)
       setFaturamentoDoDia(prev => prev + totalVenda)
 
-      // Gerar cupom fiscal
       imprimirCupom()
-
-      // Limpar venda
       limparVenda()
       setModalPagamentoAberto(false)
 
@@ -711,7 +783,6 @@ export default function PDV() {
         `Total: R$ ${totalVenda.toFixed(2)} - ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}${clienteSelecionado ? ` - ${clienteSelecionado.nome}` : ''}${mensagemDesconto}`
       )
 
-      // Se venda ativa, manter foco para próxima venda
       if (vendaAtiva) {
         setTimeout(() => {
           if (inputRef.current) {
@@ -728,7 +799,7 @@ export default function PDV() {
     }
   }
 
-  // Limpar venda (atualizado)
+  // Limpar venda
   const limparVenda = () => {
     if (itensVenda.length === 0) return
     
@@ -741,8 +812,8 @@ export default function PDV() {
       setBuscarCliente('')
       setFormaPagamento('dinheiro')
       setValorPago(0)
-      // 🆕 Limpar filtros também
       setMostrarProdutos(false)
+      setMostrarProdutosSemCodigo(false)
       setCategoriaSelecionada('')
       setBuscaProduto('')
       toast.info('🧹 Venda limpa', 'Todos os itens foram removidos')
@@ -755,7 +826,7 @@ export default function PDV() {
     }
   }
 
-  // Iniciar scanner (mantido original)
+  // Iniciar scanner
   const iniciarScanner = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -773,7 +844,7 @@ export default function PDV() {
     }
   }
 
-  // Parar scanner (mantido original)
+  // Parar scanner
   const pararScanner = () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream
@@ -788,7 +859,7 @@ export default function PDV() {
     }, 100)
   }
 
-  // Simular leitura de código de barras (mantido original)
+  // 🆕 SIMULAR LEITURA ATUALIZADA
   const simularLeituraCodigoBarras = () => {
     if (produtosComCodigoBarras.length === 0) {
       toast.warning('Nenhum produto', 'Cadastre produtos com código de barras primeiro')
@@ -796,11 +867,12 @@ export default function PDV() {
     }
 
     const produtoAleatorio = produtosComCodigoBarras[Math.floor(Math.random() * produtosComCodigoBarras.length)]
-    processarCodigoBarras(produtoAleatorio.codigoBarras || produtoAleatorio.codigo)
+    const codigoAleatorio = produtoAleatorio.codigosBarras[0] || produtoAleatorio.codigo
+    processarCodigoBarras(codigoAleatorio)
     pararScanner()
   }
 
-  // Imprimir cupom (mantido original)
+  // 🆕 IMPRIMIR CUPOM ATUALIZADO
   const imprimirCupom = () => {
     const valorDesconto = obterValorDesconto()
     const cupom = `
@@ -815,9 +887,15 @@ export default function PDV() {
       ` : ''}
       
       ITENS:
-      ${itensVenda.map(item => 
-        `${item.produto.nome} - ${item.quantidade}x R$ ${item.valorUnitario.toFixed(2)} = R$ ${item.valorTotal.toFixed(2)}`
-      ).join('\n')}
+      ${itensVenda.map(item => {
+        let linha = `${item.produto.nome} - ${item.quantidade}x R$ ${item.valorUnitario.toFixed(2)} = R$ ${item.valorTotal.toFixed(2)}`
+        if (item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO') {
+          linha += `\n  Código: ${item.codigoBarrasUsado}`
+        } else if (item.codigoBarrasUsado === 'PRODUTO_AVULSO') {
+          linha += `\n  (Produto Avulso)`
+        }
+        return linha
+      }).join('\n')}
       
       SUBTOTAL: R$ ${calcularSubtotalVenda().toFixed(2)}
       ${valorDesconto > 0 ? `DESCONTO ${tipoDesconto === 'percentual' ? `(${descontoPercentual}%)` : ''}: -R$ ${valorDesconto.toFixed(2)}` : ''}
@@ -871,17 +949,19 @@ export default function PDV() {
               <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-xl shadow-xl p-6 mb-6 text-white animate-fade-in">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
                   <div>
-                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">🛒 PDV Pro com Filtros</h1>
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">🛒 PDV Pro + Múltiplos Códigos</h1>
                     <p className="text-green-100 mt-2 text-base sm:text-lg">
                       {vendaAtiva 
                         ? '🔥 Modo Venda Ativa - Escaneie produtos continuamente' 
                         : mostrarProdutos
                           ? `📂 Categoria: ${categorias?.find(c => c.id === categoriaSelecionada)?.nome || 'Produtos'}`
-                          : 'Escaneie códigos ou filtre por categoria'
+                          : mostrarProdutosSemCodigo
+                            ? '📝 Produtos Sem Código - Adicione rapidamente'
+                            : 'Escaneie códigos, filtre por categoria ou adicione produtos avulsos'
                       }
                     </p>
                     <div className="mt-2 text-sm text-green-200">
-                      Atalhos: F1=Venda | F2=Pagamento | F3=Limpar | F4=Scanner | F5-F9=Categorias | ESC=Voltar
+                      F1=Venda | F2=Pagamento | F3=Limpar | F4=Scanner | F5-F9=Categorias | F10=Sem Código | ESC=Voltar
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
@@ -915,7 +995,7 @@ export default function PDV() {
                 </div>
               </div>
 
-              {/* Indicador visual de venda ativa (mantido original) */}
+              {/* Indicador visual de venda ativa */}
               {vendaAtiva && (
                 <div className="bg-gradient-to-r from-green-100 to-blue-100 border-2 border-green-400 rounded-xl p-5 mb-6 shadow-lg animate-pulse-slow">
                   <div className="flex items-center">
@@ -923,19 +1003,19 @@ export default function PDV() {
                     <div className="flex-1">
                       <h3 className="text-green-800 font-bold text-xl">🔥 VENDA ATIVA</h3>
                       <p className="text-green-700 mt-1">
-                        Escaneie produtos continuamente. O sistema adicionará automaticamente à venda!
+                        Escaneie produtos continuamente. Sistema com múltiplos códigos e produtos avulsos!
                       </p>
                       <div className="mt-3 text-sm text-green-600 space-y-1">
-                        <p>• Use um leitor de código de barras para máxima velocidade</p>
-                        <p>• O foco permanecerá no campo de entrada automaticamente</p>
-                        <p>• Pressione F1 ou ESC para pausar, F2 para pagamento</p>
+                        <p>• ✅ Múltiplos códigos de barras por produto suportados</p>
+                        <p>• 📝 Use F10 para adicionar produtos sem código rapidamente</p>
+                        <p>• 🔄 Controle automático de qual código foi usado na venda</p>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Aviso se não há produtos (mantido original) */}
+              {/* Aviso se não há produtos */}
               {produtosAtivos.length === 0 && (
                 <div className={`border rounded-xl p-6 mb-6 animate-fade-in ${modoNoturno ? 'bg-yellow-900 border-yellow-700' : 'bg-yellow-50 border-yellow-200'}`}>
                   <div className="flex">
@@ -965,17 +1045,155 @@ export default function PDV() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* 🆕 COLUNA 1: SCANNER E FILTROS POR CATEGORIA */}
+                {/* 🆕 COLUNA 1: SCANNER E FILTROS ATUALIZADOS */}
                 <div className="lg:col-span-1 space-y-6">
                   
-                  {/* 🆕 FILTROS POR CATEGORIA */}
+                  {/* 🆕 SEÇÃO PRODUTOS SEM CÓDIGO */}
+                  {!vendaAtiva && (
+                    <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
+                          📝 Produtos Sem Código
+                        </h3>
+                        <button
+                          onClick={() => {
+                            setMostrarProdutosSemCodigo(!mostrarProdutosSemCodigo)
+                            setMostrarProdutos(false)
+                            setCategoriaSelecionada('')
+                          }}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                            mostrarProdutosSemCodigo
+                              ? 'bg-green-500 text-white'
+                              : modoNoturno
+                                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {mostrarProdutosSemCodigo ? '📂 Fechar (F10)' : '➕ Abrir (F10)'}
+                        </button>
+                      </div>
+
+                      {mostrarProdutosSemCodigo ? (
+                        <div className="space-y-4">
+                          {/* Formulário rápido */}
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              placeholder="Nome do produto (ex: Bala sortida)"
+                              value={produtoSemCodigoNome}
+                              onChange={(e) => setProdutoSemCodigoNome(e.target.value)}
+                              className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                                modoNoturno 
+                                  ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-400' 
+                                  : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                              }`}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Preço (R$)"
+                                value={produtoSemCodigoPreco}
+                                onChange={(e) => setProdutoSemCodigoPreco(e.target.value)}
+                                className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                                  modoNoturno 
+                                    ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-400' 
+                                    : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                                }`}
+                              />
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Qtd"
+                                value={produtoSemCodigoQuantidade}
+                                onChange={(e) => setProdutoSemCodigoQuantidade(parseInt(e.target.value) || 1)}
+                                className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors ${
+                                  modoNoturno 
+                                    ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-400' 
+                                    : 'border-gray-300 bg-white text-gray-900 placeholder-gray-500'
+                                }`}
+                              />
+                            </div>
+                            <LoadingButton
+                              onClick={adicionarProdutoSemCodigo}
+                              variant="success"
+                              size="md"
+                              className="w-full"
+                              disabled={!produtoSemCodigoNome.trim() || !produtoSemCodigoPreco}
+                            >
+                              ➕ Adicionar à Venda
+                            </LoadingButton>
+                          </div>
+
+                          {/* Lista de produtos sem código cadastrados */}
+                          {produtosSemCodigo.length > 0 && (
+                            <div>
+                              <h5 className={`text-sm font-bold mb-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
+                                🗂️ Produtos sem código cadastrados:
+                              </h5>
+                              <div className="space-y-2 max-h-40 overflow-y-auto">
+                                {produtosSemCodigo.map(produto => {
+                                  const dadosCategoria = obterDadosCategoria(produto)
+                                  
+                                  return (
+                                    <button
+                                      key={produto.id}
+                                      onClick={() => adicionarProdutoDaLista(produto)}
+                                      className={`w-full p-2 rounded-lg border transition-all hover:shadow-md ${
+                                        modoNoturno 
+                                          ? 'border-gray-600 bg-gray-700 hover:bg-gray-600' 
+                                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center">
+                                        <div
+                                          className="w-6 h-6 rounded flex items-center justify-center text-white mr-2"
+                                          style={{ backgroundColor: dadosCategoria.cor }}
+                                        >
+                                          <span className="text-xs">{dadosCategoria.icone}</span>
+                                        </div>
+                                        <div className="flex-1 text-left">
+                                          <div className={`text-xs font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
+                                            {produto.nome}
+                                          </div>
+                                          <div className={`text-xs ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            R$ {produto.valorVenda.toFixed(2)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className={`text-xs ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
+                            💡 Para produtos como: bala avulsa, cigarro solto, copo de 700ml, etc.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <div className="text-4xl mb-2">📝</div>
+                          <p className={`text-sm ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
+                            Adicione produtos avulsos rapidamente
+                          </p>
+                          <p className={`text-xs mt-1 ${modoNoturno ? 'text-gray-500' : 'text-gray-500'}`}>
+                            Bala avulsa, cigarro solto, copo 700ml...
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Filtros por categoria */}
                   {!vendaAtiva && categoriasAtivas.length > 0 && (
                     <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                       <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
                         📂 Filtros por Categoria
                       </h3>
                       
-                      {/* Botões das categorias */}
                       <div className="grid grid-cols-1 gap-2 mb-4">
                         {categoriasAtivas.slice(0, 5).map((categoria, index) => (
                           <button
@@ -1008,7 +1226,6 @@ export default function PDV() {
                           </button>
                         ))}
                         
-                        {/* Botão "Sem categoria" */}
                         <button
                           onClick={() => selecionarCategoria('sem_categoria')}
                           className={`flex items-center p-3 rounded-lg border-2 transition-all duration-200 ${
@@ -1032,7 +1249,6 @@ export default function PDV() {
                         </button>
                       </div>
 
-                      {/* Botão para limpar filtro */}
                       {categoriaSelecionada && (
                         <LoadingButton
                           onClick={() => {
@@ -1051,14 +1267,13 @@ export default function PDV() {
                     </div>
                   )}
 
-                  {/* 🆕 BUSCA RÁPIDA DE PRODUTOS */}
+                  {/* Busca rápida de produtos */}
                   {(mostrarProdutos || buscaProduto) && !vendaAtiva && (
                     <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                       <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
                         🔍 Busca Rápida
                       </h3>
                       
-                      {/* Campo de busca */}
                       <div className="mb-4">
                         <input
                           type="text"
@@ -1073,7 +1288,6 @@ export default function PDV() {
                         />
                       </div>
 
-                      {/* Lista de produtos */}
                       <div className="space-y-2 max-h-80 overflow-y-auto">
                         {produtosFiltrados.length === 0 ? (
                           <div className="text-center py-4">
@@ -1087,36 +1301,80 @@ export default function PDV() {
                             const dadosCategoria = obterDadosCategoria(produto)
                             
                             return (
-                              <button
-                                key={produto.id}
-                                onClick={() => adicionarProdutoDaLista(produto)}
-                                className={`w-full p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
-                                  modoNoturno 
-                                    ? 'border-gray-600 bg-gray-700 hover:bg-gray-600' 
-                                    : 'border-gray-200 bg-white hover:bg-gray-50'
-                                }`}
-                              >
-                                <div className="flex items-center">
-                                  <div
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white mr-3"
-                                    style={{ backgroundColor: dadosCategoria.cor }}
-                                  >
-                                    <span className="text-sm">{dadosCategoria.icone}</span>
+                              <div key={produto.id} className="space-y-1">
+                                {/* Produto principal */}
+                                <button
+                                  onClick={() => adicionarProdutoDaLista(produto)}
+                                  className={`w-full p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
+                                    modoNoturno 
+                                      ? 'border-gray-600 bg-gray-700 hover:bg-gray-600' 
+                                      : 'border-gray-200 bg-white hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center">
+                                    <div
+                                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white mr-3"
+                                      style={{ backgroundColor: dadosCategoria.cor }}
+                                    >
+                                      <span className="text-sm">{dadosCategoria.icone}</span>
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                      <div className={`font-medium text-sm ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
+                                        {produto.nome}
+                                      </div>
+                                      <div className={`text-xs ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        #{produto.codigo} • {dadosCategoria.nome}
+                                      </div>
+                                      <div className={`text-xs ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
+                                        Estoque: {produto.estoque} • R$ {produto.valorVenda.toFixed(2)}
+                                      </div>
+                                      
+                                      {/* 🆕 MOSTRAR CÓDIGOS DE BARRAS DISPONÍVEIS */}
+                                      {produto.temCodigoBarras && produto.codigosBarras.length > 0 && (
+                                        <div className={`text-xs mt-1 ${modoNoturno ? 'text-blue-400' : 'text-blue-600'}`}>
+                                          📱 {produto.codigosBarras.length} código(s) de barras
+                                        </div>
+                                      )}
+                                      {!produto.temCodigoBarras && (
+                                        <div className={`text-xs mt-1 ${modoNoturno ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                                          📝 Sem código de barras
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="text-green-600 text-xl">➕</div>
                                   </div>
-                                  <div className="flex-1 text-left">
-                                    <div className={`font-medium text-sm ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
-                                      {produto.nome}
-                                    </div>
-                                    <div className={`text-xs ${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>
-                                      #{produto.codigo} • {dadosCategoria.nome}
-                                    </div>
-                                    <div className={`text-xs ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
-                                      Estoque: {produto.estoque} • R$ {produto.valorVenda.toFixed(2)}
-                                    </div>
+                                </button>
+
+                                {/* 🆕 BOTÕES PARA CÓDIGOS ESPECÍFICOS */}
+                                {produto.temCodigoBarras && produto.codigosBarras.length > 1 && (
+                                  <div className="ml-6 space-y-1">
+                                    {produto.codigosBarras.slice(0, 3).map((codigo, index) => (
+                                      <button
+                                        key={index}
+                                        onClick={() => adicionarProdutoDaLista(produto, codigo)}
+                                        className={`w-full p-2 rounded border transition-all text-left ${
+                                          modoNoturno 
+                                            ? 'border-gray-600 bg-gray-800 hover:bg-gray-600 text-gray-300' 
+                                            : 'border-gray-100 bg-gray-50 hover:bg-gray-100 text-gray-700'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <div className="text-xs font-mono">📱 {codigo}</div>
+                                            <div className="text-xs opacity-75">Código específico {index + 1}</div>
+                                          </div>
+                                          <div className="text-green-500 text-sm">+</div>
+                                        </div>
+                                      </button>
+                                    ))}
+                                    {produto.codigosBarras.length > 3 && (
+                                      <div className={`text-xs text-center py-1 ${modoNoturno ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        +{produto.codigosBarras.length - 3} códigos adicionais
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="text-green-600 text-xl">➕</div>
-                                </div>
-                              </button>
+                                )}
+                              </div>
                             )
                           })
                         )}
@@ -1130,8 +1388,8 @@ export default function PDV() {
                     </div>
                   )}
 
-                  {/* Input de Código de Barras (ATUALIZADO COM CONDIÇÕES) */}
-                  {(!mostrarProdutos || vendaAtiva) && (
+                  {/* Input de Código de Barras */}
+                  {(!mostrarProdutos || vendaAtiva) && !mostrarProdutosSemCodigo && (
                     <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                       <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
                         📱 Scanner de Produtos
@@ -1189,16 +1447,16 @@ export default function PDV() {
 
                       <div className={`mt-4 p-3 rounded-lg border ${modoNoturno ? 'bg-blue-900 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
                         <p className={`text-sm ${modoNoturno ? 'text-blue-200' : 'text-blue-800'}`}>
-                          💡 <strong>Dica:</strong> {vendaAtiva 
-                            ? 'No modo ativo, apenas escaneie - o produto será adicionado automaticamente!'
-                            : 'Use F5-F9 para filtrar por categoria ou F4 para focar aqui!'
+                          💡 <strong>Novo:</strong> {vendaAtiva 
+                            ? 'Sistema reconhece múltiplos códigos automaticamente!'
+                            : 'Use F5-F9 para categorias ou F10 para produtos sem código!'
                           }
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* RESTO DOS COMPONENTES MANTIDOS ORIGINAIS */}
+                  {/* RESTO DOS COMPONENTES MANTIDOS (CLIENTE, DESCONTO, ESTATÍSTICAS) */}
                   {/* Seção de Cliente */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
@@ -1292,13 +1550,12 @@ export default function PDV() {
                     )}
                   </div>
 
-                  {/* Desconto inteligente (mantido original) */}
+                  {/* Desconto inteligente (MANTIDO ORIGINAL) */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
                       💸 Desconto na Venda
                     </h3>
                     
-                    {/* Toggle Tipo de Desconto */}
                     <div className="flex mb-4 bg-gray-100 rounded-lg p-1">
                       <button
                         onClick={() => setTipoDesconto('percentual')}
@@ -1324,7 +1581,6 @@ export default function PDV() {
 
                     {tipoDesconto === 'percentual' ? (
                       <>
-                        {/* Botões rápidos de porcentagem */}
                         <div className="grid grid-cols-2 gap-2 mb-4">
                           {[
                             { label: '5% Cliente', valor: 5 },
@@ -1349,7 +1605,6 @@ export default function PDV() {
                           ))}
                         </div>
 
-                        {/* Campo personalizado de porcentagem */}
                         <div className="flex items-center space-x-2">
                           <input
                             type="number"
@@ -1369,7 +1624,6 @@ export default function PDV() {
                           <span className={`text-lg font-bold ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>%</span>
                         </div>
 
-                        {/* Preview do desconto em % */}
                         {descontoPercentual > 0 && calcularSubtotalVenda() > 0 && (
                           <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex justify-between items-center">
@@ -1381,7 +1635,6 @@ export default function PDV() {
                       </>
                     ) : (
                       <>
-                        {/* Campo de valor fixo */}
                         <div className="flex items-center space-x-2">
                           <span className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>R$</span>
                           <input
@@ -1401,7 +1654,6 @@ export default function PDV() {
                           />
                         </div>
 
-                        {/* Preview do desconto em valor */}
                         {descontoTotal > 0 && (
                           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
                             <div className="flex justify-between items-center">
@@ -1413,7 +1665,6 @@ export default function PDV() {
                       </>
                     )}
 
-                    {/* Limpar desconto */}
                     {(descontoPercentual > 0 || descontoTotal > 0) && (
                       <button
                         onClick={() => {
@@ -1427,7 +1678,7 @@ export default function PDV() {
                     )}
                   </div>
 
-                  {/* Estatísticas do dia (ATUALIZADO COM CATEGORIAS) */}
+                  {/* 🆕 ESTATÍSTICAS ATUALIZADAS */}
                   <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <h3 className={`text-lg font-bold mb-4 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>📊 Estatísticas</h3>
                     
@@ -1442,7 +1693,12 @@ export default function PDV() {
                         <span className={`font-bold ${modoNoturno ? 'text-green-100' : 'text-green-600'}`}>{produtosComCodigoBarras.length}</span>
                       </div>
 
-                      {/* 🆕 ESTATÍSTICAS DE CATEGORIAS */}
+                      {/* 🆕 ESTATÍSTICA DE PRODUTOS SEM CÓDIGO */}
+                      <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-yellow-900' : 'bg-yellow-50'}`}>
+                        <span className={`font-medium ${modoNoturno ? 'text-yellow-200' : 'text-yellow-800'}`}>Produtos Sem Código</span>
+                        <span className={`font-bold ${modoNoturno ? 'text-yellow-100' : 'text-yellow-600'}`}>{produtosSemCodigo.length}</span>
+                      </div>
+
                       <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-purple-900' : 'bg-purple-50'}`}>
                         <span className={`font-medium ${modoNoturno ? 'text-purple-200' : 'text-purple-800'}`}>Categorias Ativas</span>
                         <span className={`font-bold ${modoNoturno ? 'text-purple-100' : 'text-purple-600'}`}>{categoriasAtivas.length}</span>
@@ -1451,6 +1707,14 @@ export default function PDV() {
                       <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-orange-900' : 'bg-orange-50'}`}>
                         <span className={`font-medium ${modoNoturno ? 'text-orange-200' : 'text-orange-800'}`}>Itens na Venda</span>
                         <span className={`font-bold ${modoNoturno ? 'text-orange-100' : 'text-orange-600'}`}>{itensVenda.length}</span>
+                      </div>
+
+                      {/* 🆕 TOTAL DE CÓDIGOS DE BARRAS */}
+                      <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-indigo-900' : 'bg-indigo-50'}`}>
+                        <span className={`font-medium ${modoNoturno ? 'text-indigo-200' : 'text-indigo-800'}`}>Total de Códigos</span>
+                        <span className={`font-bold ${modoNoturno ? 'text-indigo-100' : 'text-indigo-600'}`}>
+                          {produtos?.reduce((total, p) => total + (p.codigosBarras?.length || 0), 0) || 0}
+                        </span>
                       </div>
 
                       {/* Status da venda */}
@@ -1471,7 +1735,7 @@ export default function PDV() {
                             ? modoNoturno ? 'text-green-100' : 'text-green-600'
                             : modoNoturno ? 'text-gray-300' : 'text-gray-600'
                         }`}>
-                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '📂 FILTRO' : '⏸️ Manual'}
+                          {vendaAtiva ? '🔥 ATIVA' : mostrarProdutos ? '📂 FILTRO' : mostrarProdutosSemCodigo ? '📝 SEM CÓDIGO' : '⏸️ Manual'}
                         </span>
                       </div>
 
@@ -1485,7 +1749,6 @@ export default function PDV() {
                         <span className={`font-bold ${modoNoturno ? 'text-green-100' : 'text-green-600'}`}>R$ {faturamentoDoDia.toFixed(2)}</span>
                       </div>
 
-                      {/* Informações do cliente selecionado */}
                       {clienteSelecionado && (
                         <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-indigo-900' : 'bg-indigo-50'}`}>
                           <span className={`font-medium ${modoNoturno ? 'text-indigo-200' : 'text-indigo-800'}`}>Cliente Ativo</span>
@@ -1493,7 +1756,6 @@ export default function PDV() {
                         </div>
                       )}
 
-                      {/* 🆕 CATEGORIA FILTRADA */}
                       {categoriaSelecionada && categorias && (
                         <div className={`flex justify-between items-center p-3 rounded-lg ${modoNoturno ? 'bg-pink-900' : 'bg-pink-50'}`}>
                           <span className={`font-medium ${modoNoturno ? 'text-pink-200' : 'text-pink-800'}`}>Filtro Ativo</span>
@@ -1509,7 +1771,7 @@ export default function PDV() {
                   </div>
                 </div>
 
-                {/* Coluna 2: Lista de Itens da Venda (MANTIDA ORIGINAL) */}
+                {/* Coluna 2: Lista de Itens da Venda (ATUALIZADA COM CÓDIGOS ESPECÍFICOS) */}
                 <div className="lg:col-span-2">
                   <div className={`rounded-xl shadow-lg overflow-hidden transition-colors duration-300 ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                     <div className={`px-6 py-4 border-b flex justify-between items-center ${modoNoturno ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -1542,24 +1804,28 @@ export default function PDV() {
                           {produtosAtivos.length === 0 
                             ? 'Cadastre produtos ativos para começar a vender'
                             : vendaAtiva
-                              ? '🔥 Escaneie códigos de barras - eles serão adicionados automaticamente!'
+                              ? '🔥 Escaneie códigos - múltiplos códigos e produtos avulsos suportados!'
                               : mostrarProdutos
                                 ? '📂 Clique nos produtos da lista para adicionar à venda'
-                                : 'Escaneie códigos de barras ou use os filtros por categoria'
+                                : mostrarProdutosSemCodigo
+                                  ? '📝 Adicione produtos sem código rapidamente'
+                                  : 'Escaneie códigos, filtre por categoria ou adicione produtos avulsos'
                           }
                         </p>
                         <div className={`text-sm space-y-2 ${modoNoturno ? 'text-gray-400' : 'text-gray-400'}`}>
                           <div>💡 {vendaAtiva 
-                            ? 'Modo ativo: Use o leitor de código de barras para máxima velocidade'
+                            ? 'Novo: Sistema detecta múltiplos códigos automaticamente!'
                             : mostrarProdutos
-                              ? 'Modo filtro: Produtos organizados por categoria para seleção rápida'
-                              : 'Use F5-F9 para filtrar por categoria ou F4 para escanear códigos'
+                              ? 'Produtos organizados por categoria com códigos específicos'
+                              : mostrarProdutosSemCodigo
+                                ? 'Adicione balas avulsas, cigarros soltos e produtos sem código'
+                                : 'F5-F9=Categorias | F10=Sem Código | F4=Scanner'
                           }</div>
-                          {!vendaAtiva && !mostrarProdutos && categoriasAtivas.length > 0 && (
+                          {!vendaAtiva && !mostrarProdutos && !mostrarProdutosSemCodigo && categoriasAtivas.length > 0 && (
                             <div className="mt-3">
-                              <p className="font-medium mb-2">Atalhos de categoria:</p>
+                              <p className="font-medium mb-2">Atalhos:</p>
                               <div className="flex flex-wrap justify-center gap-2">
-                                {categoriasAtivas.slice(0, 5).map((categoria, index) => (
+                                {categoriasAtivas.slice(0, 4).map((categoria, index) => (
                                   <span 
                                     key={categoria.id}
                                     className="text-xs px-2 py-1 rounded"
@@ -1568,6 +1834,9 @@ export default function PDV() {
                                     F{index + 5}: {categoria.icone} {categoria.nome}
                                   </span>
                                 ))}
+                                <span className="text-xs px-2 py-1 rounded bg-yellow-500 text-white">
+                                  F10: 📝 Sem Código
+                                </span>
                               </div>
                             </div>
                           )}
@@ -1575,15 +1844,24 @@ export default function PDV() {
                       </div>
                     ) : (
                       <>
-                        {/* Lista de Itens - Mobile (MANTIDA ORIGINAL) */}
+                        {/* 🆕 LISTA DE ITENS MOBILE ATUALIZADA */}
                         <div className={`block sm:hidden divide-y ${modoNoturno ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                          {itensVenda.map((item) => (
-                            <div key={item.produto.id} className="p-4">
+                          {itensVenda.map((item, index) => (
+                            <div key={`${item.produto.id}-${item.codigoBarrasUsado || index}`} className="p-4">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1 min-w-0">
                                   <h4 className={`text-sm font-bold truncate ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>{item.produto.nome}</h4>
                                   <div className={`space-y-1 text-xs mt-1 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
                                     <p><span className="font-medium">Código:</span> #{item.produto.codigo}</p>
+                                    
+                                    {/* 🆕 MOSTRAR CÓDIGO ESPECÍFICO USADO */}
+                                    {item.codigoBarrasUsado && item.codigoBarrasUsado !== 'PRODUTO_AVULSO' && (
+                                      <p><span className="font-medium text-blue-600">Código usado:</span> {item.codigoBarrasUsado}</p>
+                                    )}
+                                    {item.codigoBarrasUsado === 'PRODUTO_AVULSO' && (
+                                      <p><span className="font-medium text-yellow-600">Tipo:</span> Produto avulso</p>
+                                    )}
+                                    
                                     <p><span className="font-medium">Preço unit.:</span> R$ {item.valorUnitario.toFixed(2)}</p>
                                     <p><span className="font-medium">Subtotal:</span> R$ {item.valorTotal.toFixed(2)}</p>
                                     {item.desconto && item.desconto > 0 && (
@@ -1591,10 +1869,9 @@ export default function PDV() {
                                     )}
                                   </div>
                                   
-                                  {/* Controles de quantidade */}
                                   <div className="flex items-center space-x-2 mt-3">
                                     <button
-                                      onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade - 1)}
+                                      onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade - 1, item.codigoBarrasUsado)}
                                       className="w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center font-bold transition-colors"
                                     >
                                       -
@@ -1603,9 +1880,9 @@ export default function PDV() {
                                       {item.quantidade}
                                     </span>
                                     <button
-                                      onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade + 1)}
+                                      onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade + 1, item.codigoBarrasUsado)}
                                       className="w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 flex items-center justify-center font-bold transition-colors"
-                                      disabled={item.quantidade >= item.produto.estoque}
+                                      disabled={item.produto.id.indexOf('temp_') !== 0 && item.quantidade >= item.produto.estoque}
                                     >
                                       +
                                     </button>
@@ -1613,7 +1890,7 @@ export default function PDV() {
                                 </div>
 
                                 <button
-                                  onClick={() => removerItemVenda(item.produto.id)}
+                                  onClick={() => removerItemVenda(item.produto.id, item.codigoBarrasUsado)}
                                   className="ml-4 w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center transition-colors"
                                 >
                                   🗑️
@@ -1623,13 +1900,16 @@ export default function PDV() {
                           ))}
                         </div>
 
-                        {/* Lista de Itens - Desktop (MANTIDA ORIGINAL) */}
+                        {/* 🆕 LISTA DE ITENS DESKTOP ATUALIZADA */}
                         <div className="hidden sm:block overflow-x-auto">
                           <table className="min-w-full divide-y divide-gray-200">
                             <thead className={modoNoturno ? 'bg-gray-700' : 'bg-gray-50'}>
                               <tr>
                                 <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
                                   Produto
+                                </th>
+                                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
+                                  Código Usado
                                 </th>
                                 <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>
                                   Preço Unit.
@@ -1649,21 +1929,36 @@ export default function PDV() {
                               </tr>
                             </thead>
                             <tbody className={`divide-y ${modoNoturno ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'}`}>
-                              {itensVenda.map((item) => (
-                                <tr key={item.produto.id} className={`hover:${modoNoturno ? 'bg-gray-700' : 'bg-gray-50'} transition-colors`}>
+                              {itensVenda.map((item, index) => (
+                                <tr key={`${item.produto.id}-${item.codigoBarrasUsado || index}`} className={`hover:${modoNoturno ? 'bg-gray-700' : 'bg-gray-50'} transition-colors`}>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div>
                                       <div className={`text-sm font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>{item.produto.nome}</div>
                                       <div className={`text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-500'}`}>#{item.produto.codigo}</div>
+                                      {item.codigoBarrasUsado === 'PRODUTO_AVULSO' && (
+                                        <div className="text-xs text-yellow-600 font-medium">📝 Produto Avulso</div>
+                                      )}
                                     </div>
                                   </td>
+                                  
+                                  {/* 🆕 COLUNA CÓDIGO USADO */}
+                                  <td className={`px-6 py-4 whitespace-nowrap text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-900'}`}>
+                                    {item.codigoBarrasUsado === 'PRODUTO_AVULSO' ? (
+                                      <span className="text-yellow-600 font-mono text-xs">📝 AVULSO</span>
+                                    ) : item.codigoBarrasUsado ? (
+                                      <span className="text-blue-600 font-mono text-xs">📱 {item.codigoBarrasUsado}</span>
+                                    ) : (
+                                      <span className="text-gray-400 text-xs">Código principal</span>
+                                    )}
+                                  </td>
+                                  
                                   <td className={`px-6 py-4 whitespace-nowrap text-sm ${modoNoturno ? 'text-gray-300' : 'text-gray-900'}`}>
                                     R$ {item.valorUnitario.toFixed(2)}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center space-x-2">
                                       <button
-                                        onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade - 1)}
+                                        onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade - 1, item.codigoBarrasUsado)}
                                         className="w-8 h-8 rounded-full bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center font-bold transition-colors"
                                       >
                                         -
@@ -1672,15 +1967,15 @@ export default function PDV() {
                                         {item.quantidade}
                                       </span>
                                       <button
-                                        onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade + 1)}
+                                        onClick={() => alterarQuantidadeItem(item.produto.id, item.quantidade + 1, item.codigoBarrasUsado)}
                                         className="w-8 h-8 rounded-full bg-green-100 text-green-600 hover:bg-green-200 flex items-center justify-center font-bold transition-colors"
-                                        disabled={item.quantidade >= item.produto.estoque}
+                                        disabled={item.produto.id.indexOf('temp_') !== 0 && item.quantidade >= item.produto.estoque}
                                       >
                                         +
                                       </button>
                                     </div>
                                     <div className={`text-xs mt-1 ${modoNoturno ? 'text-gray-400' : 'text-gray-500'}`}>
-                                      Estoque: {item.produto.estoque}
+                                      {item.produto.id.indexOf('temp_') === 0 ? 'Produto avulso' : `Estoque: ${item.produto.estoque}`}
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1690,7 +1985,7 @@ export default function PDV() {
                                       min="0"
                                       max={item.valorUnitario * item.quantidade}
                                       value={item.desconto || 0}
-                                      onChange={(e) => aplicarDescontoItem(item.produto.id, parseFloat(e.target.value) || 0)}
+                                      onChange={(e) => aplicarDescontoItem(item.produto.id, parseFloat(e.target.value) || 0, item.codigoBarrasUsado)}
                                       className={`w-20 border rounded px-2 py-1 text-sm ${modoNoturno ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300 bg-white text-gray-900'}`}
                                       placeholder="0.00"
                                     />
@@ -1700,7 +1995,7 @@ export default function PDV() {
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <button
-                                      onClick={() => removerItemVenda(item.produto.id)}
+                                      onClick={() => removerItemVenda(item.produto.id, item.codigoBarrasUsado)}
                                       className="text-red-600 hover:text-red-900 transition-colors"
                                     >
                                       🗑️ Remover
@@ -1712,7 +2007,7 @@ export default function PDV() {
                           </table>
                         </div>
 
-                        {/* Total da venda (MANTIDO ORIGINAL) */}
+                        {/* Total da venda */}
                         <div className={`px-6 py-4 border-t ${modoNoturno ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
@@ -1750,6 +2045,7 @@ export default function PDV() {
                               {itensVenda.length} {itensVenda.length === 1 ? 'item' : 'itens'} • {itensVenda.reduce((total, item) => total + item.quantidade, 0)} unidades
                               {vendaAtiva && <span className="ml-2 text-green-400 font-medium">• Venda Ativa 🔥</span>}
                               {mostrarProdutos && <span className="ml-2 text-blue-400 font-medium">• Filtro Ativo 📂</span>}
+                              {mostrarProdutosSemCodigo && <span className="ml-2 text-yellow-400 font-medium">• Sem Código 📝</span>}
                               {clienteSelecionado && <span className="ml-2 font-medium">• Cliente: {clienteSelecionado.nome}</span>}
                               {obterValorDesconto() > 0 && (
                                 <span className="ml-2 text-red-500 font-medium">
@@ -1776,7 +2072,7 @@ export default function PDV() {
             </>
           )}
 
-          {/* Modal de pagamento (MANTIDO ORIGINAL) */}
+          {/* MODAIS MANTIDOS ORIGINAIS (Modal de pagamento e Scanner) */}
           {modalPagamentoAberto && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl transition-colors duration-300 ${
@@ -1806,7 +2102,7 @@ export default function PDV() {
                     modoNoturno ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-gray-50'
                   }`}>
                     <h3 className={`font-bold mb-3 ${modoNoturno ? 'text-white' : 'text-gray-800'}`}>
-                      📋 Resumo da Venda
+                      📋 Resumo da Venda com Múltiplos Códigos
                     </h3>
                     
                     {clienteSelecionado && (
@@ -1827,6 +2123,17 @@ export default function PDV() {
                           {itensVenda.reduce((total, item) => total + item.quantidade, 0)} unidades
                         </span>
                       </div>
+                      
+                      {/* 🆕 DETALHES DOS CÓDIGOS USADOS */}
+                      <div className="text-xs space-y-1">
+                        <div className={`${modoNoturno ? 'text-gray-400' : 'text-gray-600'}`}>Códigos utilizados:</div>
+                        {itensVenda.map((item, index) => (
+                          <div key={index} className={`ml-2 ${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>
+                            • {item.produto.nome}: {item.codigoBarrasUsado === 'PRODUTO_AVULSO' ? '📝 Produto Avulso' : item.codigoBarrasUsado || 'Código principal'}
+                          </div>
+                        ))}
+                      </div>
+                      
                       <div className="flex justify-between">
                         <span className={`${modoNoturno ? 'text-gray-300' : 'text-gray-700'}`}>Subtotal:</span>
                         <span className={`font-medium ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>
@@ -1987,12 +2294,12 @@ export default function PDV() {
             </div>
           )}
 
-          {/* Scanner de Código de Barras (MANTIDO ORIGINAL) */}
+          {/* Scanner de Código de Barras */}
           {showScanner && (
             <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
               <div className={`rounded-xl shadow-xl w-full max-w-md ${modoNoturno ? 'bg-gray-800' : 'bg-white'}`}>
                 <div className={`flex justify-between items-center p-4 border-b ${modoNoturno ? 'border-gray-600' : 'border-gray-200'}`}>
-                  <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>📱 Scanner PDV</h3>
+                  <h3 className={`text-lg font-bold ${modoNoturno ? 'text-white' : 'text-gray-900'}`}>📱 Scanner PDV Pro</h3>
                   <button
                     onClick={pararScanner}
                     className={`hover:${modoNoturno ? 'text-gray-300' : 'text-gray-600'} transition-colors ${modoNoturno ? 'text-gray-400' : 'text-gray-400'}`}
@@ -2012,7 +2319,6 @@ export default function PDV() {
                       className="w-full h-64 bg-black rounded-lg"
                     />
                     
-                    {/* Overlay de mira melhorado */}
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="border-2 border-green-500 w-48 h-24 rounded-lg animate-pulse">
                         <div className="absolute top-0 left-0 w-4 h-4 border-l-2 border-t-2 border-green-500"></div>
@@ -2025,7 +2331,7 @@ export default function PDV() {
                   
                   <div className="mt-4 text-center">
                     <p className={`text-sm mb-4 ${modoNoturno ? 'text-gray-300' : 'text-gray-600'}`}>
-                      Aponte a câmera para o código de barras do produto
+                      Sistema com múltiplos códigos ativo - Escaneie qualquer código cadastrado
                     </p>
                     <LoadingButton
                       onClick={simularLeituraCodigoBarras}
@@ -2042,32 +2348,32 @@ export default function PDV() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES ADICIONAIS ATUALIZADAS */}
+          {/* 🆕 INFORMAÇÕES FINAIS ATUALIZADAS */}
           {!loadingProdutos && !loadingClientes && !loadingCategorias && (
             <div className={`mt-8 border rounded-xl p-4 transition-colors duration-300 ${
               modoNoturno ? 'bg-green-900 border-green-700' : 'bg-green-50 border-green-200'
             }`}>
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <div className="text-2xl">🛒</div>
+                  <div className="text-2xl">🚀</div>
                 </div>
                 <div className="ml-3">
                   <h3 className={`text-sm font-medium ${modoNoturno ? 'text-green-200' : 'text-green-800'}`}>
-                    PDV Pro com Filtros por Categoria e Integração Total
+                    PDV Pro com Múltiplos Códigos de Barras e Produtos Avulsos
                   </h3>
                   <div className={`mt-2 text-sm space-y-1 ${modoNoturno ? 'text-green-300' : 'text-green-700'}`}>
+                    <p>• <strong>🏷️ Múltiplos códigos:</strong> Sistema reconhece todos os códigos cadastrados por produto</p>
+                    <p>• <strong>📝 Produtos avulsos:</strong> F10 para adicionar balas soltas, cigarros avulsos, etc.</p>
+                    <p>• <strong>🔍 Busca inteligente:</strong> Encontre produtos por nome ou códigos específicos</p>
                     <p>• <strong>📂 Filtros por categoria:</strong> F5-F9 para acesso rápido às categorias principais</p>
-                    <p>• <strong>🔍 Busca inteligente:</strong> Encontre produtos sem código de barras rapidamente</p>
-                    <p>• <strong>🎨 Visual categorizado:</strong> Produtos organizados com ícones e cores</p>
-                    <p>• <strong>⚡ Seleção rápida:</strong> Clique direto no produto para adicionar à venda</p>
-                    <p>• <strong>👥 Gestão de clientes:</strong> Busca, seleção e histórico integrado</p>
-                    <p>• <strong>🎯 Limite de crédito:</strong> Validação automática para vendas a prazo</p>
-                    <p>• <strong>💳 Múltiplas formas:</strong> Dinheiro, cartão, PIX e vendas a prazo</p>
-                    <p>• <strong>🔥 Venda ativa:</strong> Modo contínuo para escaneamento automático</p>
-                    <p>• <strong>💸 Desconto inteligente:</strong> Por percentual ou valor fixo com botões rápidos</p>
-                    <p>• <strong>⌨️ Atalhos completos:</strong> F1=Venda | F2=Pagamento | F3=Limpar | F4=Scanner | F5-F9=Categorias</p>
-                    <p>• <strong>📱 Scanner híbrido:</strong> Câmera + leitor físico + busca manual</p>
-                    <p>• <strong>🔄 Integração total:</strong> Dados sincronizados com sistema completo</p>
+                    <p>• <strong>🎯 Controle granular:</strong> Sistema registra qual código específico foi usado na venda</p>
+                    <p>• <strong>📱 Scanner híbrido:</strong> Câmera + leitor físico + busca manual integrados</p>
+                    <p>• <strong>👥 Gestão completa:</strong> Clientes, descontos, formas de pagamento e relatórios</p>
+                    <p>• <strong>🔥 Venda ativa:</strong> Modo contínuo para escaneamento automático de múltiplos códigos</p>
+                    <p>• <strong>🧾 Cupom detalhado:</strong> Impressão com códigos específicos utilizados</p>
+                    <p>• <strong>🔄 Integração total:</strong> Dados sincronizados com sistema de produtos e movimentações</p>
+                    <p>• <strong>⌨️ Atalhos completos:</strong> F1-F10 para máxima produtividade</p>
+                    <p>• <strong>🌙 Modo noturno:</strong> Interface adaptada para diferentes ambientes</p>
                   </div>
                 </div>
               </div>
