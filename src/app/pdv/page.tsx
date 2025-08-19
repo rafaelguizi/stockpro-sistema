@@ -791,7 +791,7 @@ export default function PDV() {
     setFaturamentoDoDia(prev => prev + totalVenda)
 
     imprimirCupom()
-    limparVenda()
+    limparVenda(true)
     setModalPagamentoAberto(false)
 
     playSound('success')
