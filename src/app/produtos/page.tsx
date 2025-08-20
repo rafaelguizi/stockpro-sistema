@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES, VALORES E EXCEL
+// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES, VALORES E EXCEL CORRIGIDO
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -18,7 +18,7 @@ import {
   ProdutoExcel 
 } from '@/utils/excelUtils'
 
-// 🆕 INTERFACE CATEGORIA FIRESTORE
+// �� INTERFACE CATEGORIA FIRESTORE
 interface CategoriaFirestore {
   id: string
   nome: string
@@ -60,7 +60,7 @@ interface Produto {
   tamanho?: string
 }
 
-// 🔄 INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
+// �� INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
 interface Movimentacao {
   id: string
   produto: string
@@ -810,7 +810,7 @@ export default function Produtos() {
     }
   }
 
-  // 💾 Função para processar importação
+  // ✅ 💾 FUNÇÃO PARA PROCESSAR IMPORTAÇÃO - CORRIGIDA COMPLETAMENTE
   const processarImportacao = async () => {
     if (!dadosImport.length || !user) return
 
@@ -834,21 +834,18 @@ export default function Produtos() {
             })
           }
 
-          // Converter data de validade
-          let dataValidade = ''
-          if (produtoExcel.dataValidade) {
+          // ✅ CONVERTER DATA DE VALIDADE - CORRIGIDO
+          let dataValidade: string | undefined = undefined
+          if (produtoExcel.dataValidade && produtoExcel.dataValidade.trim() !== '') {
             const [dia, mes, ano] = produtoExcel.dataValidade.split('/')
             dataValidade = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
           }
 
-          const novoProduto = {
+          // ✅ CRIAR OBJETO BASE COM CAMPOS OBRIGATÓRIOS
+          const produtoBase: Omit<Produto, 'id'> = {
             codigo: produtoExcel.codigo.toString(),
             nome: produtoExcel.nome.toString(),
             categoria: produtoExcel.categoria.toString(),
-            marca: produtoExcel.marca?.toString() || '',
-            modelo: produtoExcel.modelo?.toString() || '',
-            cor: produtoExcel.cor?.toString() || '',
-            tamanho: produtoExcel.tamanho?.toString() || '',
             codigosBarras,
             temCodigoBarras: produtoExcel.temCodigoBarras?.toString().toUpperCase() === 'SIM',
             isDestilado: produtoExcel.isDestilado?.toString().toUpperCase() === 'SIM',
@@ -858,16 +855,47 @@ export default function Produtos() {
             estoque: Number(produtoExcel.estoqueAtual) || 0,
             ativo: produtoExcel.ativo?.toString().toUpperCase() === 'SIM',
             temValidade: produtoExcel.temValidade?.toString().toUpperCase() === 'SIM',
-            dataValidade: dataValidade || undefined,
             diasAlerta: Number(produtoExcel.diasAlerta) || 30,
             dataCadastro: new Date().toLocaleDateString('pt-BR'),
             userId: user.uid
           }
 
-          await addDocument(novoProduto)
+          // ✅ ADICIONAR CAMPOS OPCIONAIS APENAS SE EXISTIREM
+          const novoProduto: Partial<Omit<Produto, 'id'>> = { ...produtoBase }
+
+          // Adicionar campos opcionais apenas se não estiverem vazios
+          if (produtoExcel.marca && produtoExcel.marca.toString().trim() !== '') {
+            novoProduto.marca = produtoExcel.marca.toString()
+          }
+
+          if (produtoExcel.modelo && produtoExcel.modelo.toString().trim() !== '') {
+            novoProduto.modelo = produtoExcel.modelo.toString()
+          }
+
+          if (produtoExcel.cor && produtoExcel.cor.toString().trim() !== '') {
+            novoProduto.cor = produtoExcel.cor.toString()
+          }
+
+          if (produtoExcel.tamanho && produtoExcel.tamanho.toString().trim() !== '') {
+            novoProduto.tamanho = produtoExcel.tamanho.toString()
+          }
+
+          // ✅ ADICIONAR DATA DE VALIDADE APENAS SE EXISTIR
+          if (dataValidade) {
+            novoProduto.dataValidade = dataValidade
+          }
+
+          // ✅ FILTRAR CAMPOS UNDEFINED E FAZER CAST CORRETO
+          const produtoLimpo = Object.fromEntries(
+            Object.entries(novoProduto).filter(([_, value]) => value !== undefined)
+          ) as Omit<Produto, 'id'> // ✅ CAST TYPESCRIPT CORRETO
+
+          console.log('📦 Importando produto:', produtoLimpo.nome, produtoLimpo)
+
+          await addDocument(produtoLimpo)
           sucessos++
         } catch (error) {
-          console.error(`Erro ao importar produto ${produtoExcel.codigo}:`, error)
+          console.error(`❌ Erro ao importar produto ${produtoExcel.codigo}:`, error)
           erros++
         }
       }
@@ -888,7 +916,7 @@ export default function Produtos() {
       setErrosValidacao([])
 
     } catch (error) {
-      console.error('Erro na importação:', error)
+      console.error('❌ Erro na importação:', error)
       toast.error('Erro na importação', 'Não foi possível importar os produtos')
     } finally {
       setImportando(false)

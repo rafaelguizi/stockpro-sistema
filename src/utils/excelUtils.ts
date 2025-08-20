@@ -47,7 +47,7 @@ export const COLUNAS_EXCEL = [
   { key: 'observacoes', label: 'Observações', width: 30 }
 ]
 
-// 📝 Dados de exemplo para o template
+// 📝 Dados de exemplo para o template - CORRIGIDOS
 export const EXEMPLO_PRODUTOS: ProdutoExcel[] = [
   {
     codigo: '001',
@@ -85,9 +85,9 @@ export const EXEMPLO_PRODUTOS: ProdutoExcel[] = [
     estoqueMinimo: 5,
     valorCompra: 85.00,
     valorVenda: 120.00,
-    temValidade: 'NÃO',
-    dataValidade: '',
-    diasAlerta: 0,
+    temValidade: 'NÃO', // ✅ CORRIGIDO
+    dataValidade: '', // ✅ CORRIGIDO - Campo vazio para destilados
+    diasAlerta: 0, // ✅ CORRIGIDO
     ativo: 'SIM',
     observacoes: 'Destilado - sem validade'
   },
@@ -99,7 +99,7 @@ export const EXEMPLO_PRODUTOS: ProdutoExcel[] = [
     modelo: 'Original',
     cor: 'Verde',
     tamanho: 'Unidade',
-    codigosBarras: '',
+    codigosBarras: '', // ✅ CORRIGIDO - Produto sem código
     temCodigoBarras: 'NÃO',
     isDestilado: 'NÃO',
     estoqueAtual: 200,
