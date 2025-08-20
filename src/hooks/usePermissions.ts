@@ -156,16 +156,16 @@ export function usePermissions(): { permissions: Permissions; limits: UserLimits
       case 'COMPANY_USER':
         // Funcionário - acesso limitado
         return {
-          canViewCosts: false, // 🚫 Não vê custos
+          canViewCosts: false, // �� Não vê custos
           canViewProfits: false, // 🚫 Não vê lucros  
           canViewMargins: false, // 🚫 Não vê margens
           canManageUsers: false, // 🚫 Não gerencia usuários
           canViewUsers: true, // ✅ Pode ver lista de usuários
           canCreateUsers: false,
           canDeleteUsers: false,
-          canManageProducts: true, // ✅ Pode gerenciar produtos
-          canViewProducts: true,
-          canCreateProducts: true,
+          canManageProducts: false, // 🚫 CORRIGIDO: Não pode gerenciar produtos
+          canViewProducts: true, // ✅ Pode ver produtos (sem preços)
+          canCreateProducts: false, // 🚫 CORRIGIDO: Não pode criar produtos
           canDeleteProducts: false, // 🚫 Não pode deletar
           canEditPrices: false, // 🚫 Não edita preços
           canViewFullReports: false, // 🚫 Não vê relatórios completos
@@ -182,7 +182,7 @@ export function usePermissions(): { permissions: Permissions; limits: UserLimits
           canManageSuppliers: false, // 🚫 Não gerencia fornecedores
           canViewCustomers: true,
           canViewSuppliers: true // ✅ Só visualiza fornecedores
-        }
+  }
 
       default:
         // Fallback para roles desconhecidos

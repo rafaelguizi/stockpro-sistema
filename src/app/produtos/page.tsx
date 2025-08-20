@@ -1,9 +1,9 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES
+// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES E VALORES
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { usePermissions } from '@/hooks/usePermissions' // 🆕 ADICIONADO
+import { usePermissions } from '@/hooks/usePermissions'
 import { useFirestore } from '@/hooks/useFirestore'
 import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
@@ -23,7 +23,7 @@ interface CategoriaFirestore {
   userId: string
 }
 
-// �� INTERFACE PRODUTO CORRIGIDA
+// 📦 INTERFACE PRODUTO CORRIGIDA
 interface Produto {
   id: string
   codigo: string
@@ -52,7 +52,7 @@ interface Produto {
   tamanho?: string
 }
 
-// 🆕 INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
+// �� INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
 interface Movimentacao {
   id: string
   produto: string
@@ -94,8 +94,8 @@ interface CategoriaProduto {
 
 // 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS CORRIGIDO
 interface GerenciadorCodigosBarrasProps {
-  codigos: Record<string, number>  // �� Mudança aqui
-  onChange: (codigos: Record<string, number>) => void  // 🆕 Mudança aqui
+  codigos: Record<string, number>
+  onChange: (codigos: Record<string, number>) => void
   disabled?: boolean
   onScanear?: () => void
   produtoId?: string
@@ -270,7 +270,6 @@ function GerenciadorCodigosBarras({
                       onClick={() => replicarCodigo(codigo)}
                       className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                       disabled={disabled}
-                      title="Adicionar mais unidades"
                     >
                       📋
                     </button>
@@ -279,7 +278,6 @@ function GerenciadorCodigosBarras({
                       onClick={() => removerCodigo(codigo)}
                       className="text-red-600 hover:text-red-800 text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
                       disabled={disabled}
-                      title="Remover código completamente"
                     >
                       ❌
                     </button>
@@ -615,11 +613,12 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
 export default function Produtos() {
   const router = useRouter()
   const { user } = useAuth()
-  const { permissions } = usePermissions() // 🆕 ADICIONADO
+  const { permissions } = usePermissions()
   const toast = useToastContext()
   
-  // 🆕 FUNÇÃO PARA VERIFICAR SE É ADMIN
+  // 🆕 FUNÇÕES PARA VERIFICAR PERMISSÕES E VISUALIZAÇÃO
   const isAdmin = () => user?.role === 'COMPANY_ADMIN' || user?.role === 'SUPER_ADMIN'
+  const canViewPrices = () => isAdmin() && (permissions.canViewCosts || permissions.canViewProfits)
   
   // Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -687,7 +686,7 @@ export default function Produtos() {
     nome: '',
     categoria: '',
     categoriaId: '',
-    codigosBarras: {} as Record<string, number>,  // 🆕 Objeto em vez de array
+    codigosBarras: {} as Record<string, number>,
     temCodigoBarras: true,
     isDestilado: false,
     estoqueMinimo: '',
@@ -751,7 +750,7 @@ export default function Produtos() {
         sincronizarDados()
       }
     }
-  }, [movimentacoes, sincronizarDados]) // ✅ Removido: produtos, ultimaSincronizacao
+  }, [movimentacoes, sincronizarDados])
 
   // ✅ USEEFFECT DOS CÓDIGOS OTIMIZADO - Menos execuções
   useEffect(() => {
@@ -768,7 +767,7 @@ export default function Produtos() {
         console.log(`📱 ${movimentacoesRecentes.length} códigos foram utilizados em movimentações recentes`)
       }
     }
-  }, [movimentacoes, loadingMovimentacoes, loadingProdutos]) // ✅ Removido: produtos
+  }, [movimentacoes, loadingMovimentacoes, loadingProdutos])
 
   // Categorias ativas Firestore
   const categoriasAtivasFirestore = useMemo(() => {
@@ -963,7 +962,7 @@ export default function Produtos() {
       nome: '',
       categoria: '',
       categoriaId: '',
-      codigosBarras: {},  // �� Objeto vazio
+      codigosBarras: {},
       temCodigoBarras: true,
       isDestilado: false,
       estoqueMinimo: '',
@@ -1081,7 +1080,7 @@ export default function Produtos() {
           gerarProximoCodigo(),
         nome: nomeParaValidar,
         categoria: formData.categoria,
-        codigosBarras: formData.temCodigoBarras ? formData.codigosBarras : {},  // 🆕 Objeto em vez de array
+        codigosBarras: formData.temCodigoBarras ? formData.codigosBarras : {},
         temCodigoBarras: formData.temCodigoBarras,
         isDestilado: formData.isDestilado,
         estoqueMinimo,
@@ -1197,7 +1196,7 @@ export default function Produtos() {
         nome: produto.nome,
         categoria: produto.categoria,
         categoriaId: produto.categoriaId || '',
-        codigosBarras: produto.codigosBarras || {},  // 🆕 Objeto em vez de array
+        codigosBarras: produto.codigosBarras || {},
         temCodigoBarras: produto.temCodigoBarras ?? true,
         isDestilado: produto.isDestilado || false,
         estoqueMinimo: produto.estoqueMinimo.toString(),
@@ -1324,14 +1323,14 @@ export default function Produtos() {
     return matchBusca && matchCategoria && matchStatus && matchValidade
   }) : []
 
-  // Categorias para filtro combinadas
-  const categoriasParaFiltro = useMemo(() => {
-    const categoriasProdutos = produtos ? [...new Set(produtos.map(p => p.categoria))].filter(Boolean) : []
-    const categoriasFirestoreNomes = categoriasAtivasFirestore.map(cat => cat.nome)
+    // Categorias para filtro combinadas
+    const categoriasParaFiltro = useMemo(() => {
+      const categoriasProdutos = produtos ? [...new Set(produtos.map(p => p.categoria))].filter(Boolean) : []
+      const categoriasFirestoreNomes = categoriasAtivasFirestore.map(cat => cat.nome)
     
-    const todasCategorias = [...new Set([...categoriasProdutos, ...categoriasFirestoreNomes])]
-    return todasCategorias.sort()
-    }, [produtos, categoriasAtivasFirestore])
+      const todasCategorias = [...new Set([...categoriasProdutos, ...categoriasFirestoreNomes])]
+      return todasCategorias.sort()
+  }, [produtos, categoriasAtivasFirestore])
 
   // Estatísticas de validade
   const estatisticasValidade = produtos ? {
@@ -1444,9 +1443,10 @@ export default function Produtos() {
                     Modo Funcionário - Visualização de Produtos
                   </h3>
                   <div className="mt-2 text-sm text-blue-700">
-                    <p>✅ Você pode visualizar todos os produtos, preços, estoque e códigos</p>
+                    <p>✅ Você pode visualizar todos os produtos, códigos e estoque</p>
                     <p>✅ Use os filtros para encontrar produtos rapidamente</p>
                     <p>✅ Acesse o PDV para realizar vendas</p>
+                    <p>🔒 Valores financeiros são restritos para administradores</p>
                     <p>ℹ️ Para criar ou editar produtos, solicite ao administrador</p>
                   </div>
                 </div>
@@ -1495,7 +1495,7 @@ export default function Produtos() {
                 </LoadingButton>
                 
                 {/* 🔒 NOVO PRODUTO - só para quem pode criar */}
-                {permissions.canCreateProducts && (
+                {(permissions.canCreateProducts && isAdmin()) && (
                   <LoadingButton
                     onClick={() => setShowForm(true)}
                     variant="primary"
@@ -1607,7 +1607,7 @@ export default function Produtos() {
           )}
 
           {/* 🔒 FORMULÁRIO COM CONTROLE DE PERMISSÕES */}
-          {showForm && permissions.canCreateProducts && (
+          {showForm && (permissions.canCreateProducts && isAdmin()) && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b">
@@ -1920,7 +1920,7 @@ export default function Produtos() {
                   {/* 🆕 GERENCIADOR DE CÓDIGOS CORRIGIDO */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">�� Códigos de Barras</h4>
+                      <h4 className="text-lg font-bold text-gray-900">📱 Códigos de Barras</h4>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1928,7 +1928,7 @@ export default function Produtos() {
                           onChange={(e) => setFormData(prev => ({
                             ...prev,
                             temCodigoBarras: e.target.checked,
-                            codigosBarras: e.target.checked ? prev.codigosBarras : {}  // 🆕 Objeto vazio
+                            codigosBarras: e.target.checked ? prev.codigosBarras : {}
                           }))}
                           disabled={loading}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
@@ -1947,7 +1947,7 @@ export default function Produtos() {
                         disabled={loading}
                         onScanear={iniciarScanner}
                         produtoId={editingId || undefined}
-                        ultimasMovimentacoes={movimentacoes || undefined}  // 🆕 CORRIGIDO
+                        ultimasMovimentacoes={movimentacoes || undefined}
                       />
                     ) : (
                       <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -2082,7 +2082,7 @@ export default function Produtos() {
           )}
 
           {/* 🆕 MENSAGEM SE TENTAR ACESSAR SEM PERMISSÃO */}
-          {showForm && !permissions.canCreateProducts && (
+          {showForm && !(permissions.canCreateProducts && isAdmin()) && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
                 <div className="text-center">
@@ -2112,7 +2112,7 @@ export default function Produtos() {
             <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
                 <div className="flex justify-between items-center p-4 border-b">
-                  <h3 className="text-lg font-bold text-gray-900">�� Scanner de Código de Barras</h3>
+                  <h3 className="text-lg font-bold text-gray-900">📱 Scanner de Código de Barras</h3>
                   <button
                     onClick={pararScanner}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2174,7 +2174,7 @@ export default function Produtos() {
                     }
                   </p>
                   {/* 🔒 CONTROLE DE PERMISSÃO */}
-                  {permissions.canCreateProducts ? (
+                  {(permissions.canCreateProducts && isAdmin()) ? (
                     <LoadingButton
                       onClick={() => setShowForm(true)}
                       variant="primary"
@@ -2250,8 +2250,14 @@ export default function Produtos() {
                                     <p><span className="font-medium">Marca:</span> {produto.marca}</p>
                                   )}
                                   <p><span className="font-medium">Estoque:</span> {produto.estoque} unidades</p>
-                                  <p><span className="font-medium">Compra:</span> R$ {produto.valorCompra.toFixed(2)}</p>
-                                  <p><span className="font-medium">Venda:</span> R$ {produto.valorVenda.toFixed(2)}</p>
+                                  
+                                  {/* 🔒 PREÇOS CONDICIONAIS */}
+                                  {canViewPrices() && (
+                                    <>
+                                      <p><span className="font-medium">Compra:</span> R$ {produto.valorCompra.toFixed(2)}</p>
+                                      <p><span className="font-medium">Venda:</span> R$ {produto.valorVenda.toFixed(2)}</p>
+                                    </>
+                                  )}
                                   
                                   {/* Informações de validade */}
                                   {produto.isDestilado ? (
@@ -2305,7 +2311,7 @@ export default function Produtos() {
                                   {/* Badge destilado */}
                                   {produto.isDestilado && (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                      �� Destilado
+                                      🥃 Destilado
                                     </span>
                                   )}
 
@@ -2339,7 +2345,7 @@ export default function Produtos() {
 
                               {/* 🔒 AÇÕES MOBILE COM CONTROLE DE PERMISSÕES */}
                               <div className="flex flex-col space-y-2 ml-4">
-                                {permissions.canCreateProducts && (
+                                {(permissions.canCreateProducts && isAdmin()) && (
                                   <LoadingButton
                                     onClick={() => handleEdit(produto)}
                                     isLoading={loading}
@@ -2350,7 +2356,7 @@ export default function Produtos() {
                                     ✏️
                                   </LoadingButton>
                                 )}
-                                {permissions.canCreateProducts && (
+                                {(permissions.canCreateProducts && isAdmin()) && (
                                   <LoadingButton
                                     onClick={() => toggleStatus(produto.id)}
                                     isLoading={loading}
@@ -2361,7 +2367,7 @@ export default function Produtos() {
                                     {produto.ativo ? '⏸️' : '▶️'}
                                   </LoadingButton>
                                 )}
-                                {permissions.canDeleteProducts && (
+                                {(permissions.canCreateProducts && isAdmin()) && (
                                   <LoadingButton
                                     onClick={() => handleDelete(produto.id)}
                                     isLoading={loading}
@@ -2373,12 +2379,12 @@ export default function Produtos() {
                                   </LoadingButton>
                                 )}
                                 {/* 🆕 BOTÃO INFO PARA FUNCIONÁRIOS */}
-                                {!permissions.canCreateProducts && (
+                                {!(permissions.canCreateProducts && isAdmin()) && (
                                   <LoadingButton
                                     onClick={() => {
                                       toast.info(
                                         'Informações do produto',
-                                        `${produto.nome} - Estoque: ${produto.estoque} unidades - Preço: R$ ${produto.valorVenda.toFixed(2)}`
+                                        `${produto.nome} - Estoque: ${produto.estoque} unidades`
                                       )
                                     }}
                                     variant="secondary"
@@ -2414,7 +2420,7 @@ export default function Produtos() {
                             Estoque
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Valores
+                            {canViewPrices() ? 'Valores' : 'Acesso'}
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Validade
@@ -2428,7 +2434,7 @@ export default function Produtos() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {produtosFiltrados.map((produto) => {
+                          {produtosFiltrados.map((produto) => {
                           const validadeInfo = verificarValidade(produto)
                           const dadosCategoria = obterDadosCategoria(produto)
                           const totalUnidades = Object.values(produto.codigosBarras || {}).reduce((a, b) => a + b, 0)
@@ -2517,9 +2523,20 @@ export default function Produtos() {
                                   )}
                                 </div>
                               </td>
+                              
+                              {/* 🔒 COLUNA DE VALORES COM CONTROLE */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <div>Compra: R$ {produto.valorCompra.toFixed(2)}</div>
-                                <div>Venda: R$ {produto.valorVenda.toFixed(2)}</div>
+                                {canViewPrices() ? (
+                                  <div>
+                                    <div>Compra: R$ {produto.valorCompra.toFixed(2)}</div>
+                                    <div>Venda: R$ {produto.valorVenda.toFixed(2)}</div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-2">
+                                    <div className="text-gray-400 text-lg">🔒</div>
+                                    <div className="text-xs text-gray-500">Acesso restrito</div>
+                                  </div>
+                                )}
                               </td>
                               
                               {/* Coluna de validade */}
@@ -2588,7 +2605,7 @@ export default function Produtos() {
                               {/* 🔒 AÇÕES DESKTOP COM CONTROLE DE PERMISSÕES */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <div className="flex space-x-2">
-                                  {permissions.canCreateProducts && (
+                                  {(permissions.canCreateProducts && isAdmin()) && (
                                     <LoadingButton
                                       onClick={() => handleEdit(produto)}
                                       isLoading={loading}
@@ -2598,7 +2615,7 @@ export default function Produtos() {
                                       ✏️
                                     </LoadingButton>
                                   )}
-                                  {permissions.canCreateProducts && (
+                                  {(permissions.canCreateProducts && isAdmin()) && (
                                     <LoadingButton
                                       onClick={() => toggleStatus(produto.id)}
                                       isLoading={loading}
@@ -2608,7 +2625,7 @@ export default function Produtos() {
                                       {produto.ativo ? '⏸️' : '▶️'}
                                     </LoadingButton>
                                   )}
-                                  {permissions.canDeleteProducts && (
+                                  {(permissions.canCreateProducts && isAdmin()) && (
                                     <LoadingButton
                                       onClick={() => handleDelete(produto.id)}
                                       isLoading={loading}
@@ -2620,12 +2637,12 @@ export default function Produtos() {
                                   )}
                                   
                                   {/* 🆕 BOTÃO INFO PARA FUNCIONÁRIOS */}
-                                  {!permissions.canCreateProducts && (
+                                  {!(permissions.canCreateProducts && isAdmin()) && (
                                     <LoadingButton
                                       onClick={() => {
                                         toast.info(
                                           'Informações do produto',
-                                          `${produto.nome} - Estoque: ${produto.estoque} unidades - Preço: R$ ${produto.valorVenda.toFixed(2)}`
+                                          `${produto.nome} - Estoque: ${produto.estoque} unidades`
                                         )
                                       }}
                                       variant="secondary"
@@ -2651,7 +2668,7 @@ export default function Produtos() {
           {!isLoadingData && produtos && produtos.length > 0 && (
             <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200 animate-fade-in">
               <h3 className="text-lg font-bold text-gray-800 mb-6">📊 Resumo dos Produtos com Contagem</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className={`grid grid-cols-2 sm:grid-cols-3 ${canViewPrices() ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
                   <div className="text-2xl font-bold text-blue-600">{produtos.filter(p => p.ativo).length}</div>
                   <div className="text-blue-600 text-sm font-medium">Produtos Ativos</div>
@@ -2680,12 +2697,15 @@ export default function Produtos() {
                   <div className="text-orange-600 text-sm font-medium">Com Validade</div>
                 </div>
 
-                <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
-                  <div className="text-lg font-bold text-purple-600">
-                    R$ {produtos.filter(p => p.ativo).reduce((total, p) => total + (p.estoque * p.valorCompra), 0).toFixed(2)}
+                {/* 🔒 VALOR DO ESTOQUE - SÓ PARA ADMINS */}
+                {canViewPrices() && (
+                  <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
+                    <div className="text-lg font-bold text-purple-600">
+                      R$ {produtos.filter(p => p.ativo).reduce((total, p) => total + (p.estoque * p.valorCompra), 0).toFixed(2)}
+                    </div>
+                    <div className="text-purple-600 text-sm font-medium">Valor Estoque</div>
                   </div>
-                  <div className="text-purple-600 text-sm font-medium">Valor Estoque</div>
-                </div>
+                )}
               </div>
 
               {/* 🆕 RESUMO DE CÓDIGOS COM CONTAGEM DETALHADA */}
@@ -2779,15 +2799,15 @@ export default function Produtos() {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-green-800 mb-2">
-                  Sistema Avançado: Contagem Inteligente de Códigos com Controle de Permissões
+                  Sistema Avançado: Contagem Inteligente com Controle de Permissões
                 </h3>
                 <div className="text-sm text-green-700 space-y-2">
                   <p>• <strong>🔢 Contagem por código:</strong> Cada código registra quantas unidades existem</p>
                   <p>• <strong>📱 Scanner integrado:</strong> Adicione códigos diretamente com câmera ou digitação</p>
                   <p>• <strong>➕/➖ Controle granular:</strong> Ajuste quantidades individualmente por código</p>
                   <p>• <strong>🔄 Sincronização controlada:</strong> Movimentações atualizam contagens sem loops</p>
-                  <p>• <strong>�� Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
-                  <p>• <strong>�� Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
+                  <p>• <strong>🛒 Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
+                  <p>• <strong>📊 Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
                   <p>• <strong>🥃 Destilados inteligentes:</strong> Bebidas destiladas automaticamente sem validade</p>
                   <p>• <strong>📝 Produtos sem código:</strong> Suporte a itens avulsos e personalizados</p>
                   <p>• <strong>🎨 Interface visual:</strong> Cores por categoria e indicadores claros</p>
@@ -2799,6 +2819,7 @@ export default function Produtos() {
                   <p>• <strong>🎯 Sincronização inteligente:</strong> Apenas quando necessário (intervalos de 10 minutos)</p>
                   <p>• <strong>🔒 Controle de permissões:</strong> Funcionários só visualizam, administradores editam tudo</p>
                   <p>• <strong>👤 Interface adaptativa:</strong> Botões e funcionalidades baseados no perfil do usuário</p>
+                  <p>• <strong>💰 Proteção financeira:</strong> Valores de compra/venda ocultos para funcionários</p>
                   <p>• <strong>💡 Mensagens educativas:</strong> Orientações claras sobre limitações e funcionalidades</p>
                 </div>
               </div>
@@ -2811,14 +2832,15 @@ export default function Produtos() {
               <div className="flex items-center space-x-3">
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium text-blue-800">
-                  Sistema operacional - Controle de permissões ativo
+                  Sistema operacional - Controle de permissões e valores ativos
                 </span>
               </div>
               <div className="text-xs text-blue-600 space-x-4">
                 <span>Loading: {isLoadingData ? '🔄' : '✅'}</span>
                 <span>Sync: {sincronizandoManualmente ? '🔄' : '✅'}</span>
-                <span>Permissions: {permissions.canCreateProducts ? '👑' : '👤'}</span>
+                <span>Permissions: {(permissions.canCreateProducts && isAdmin()) ? '👑' : '👤'}</span>
                 <span>Role: {isAdmin() ? 'Admin' : 'Employee'}</span>
+                <span>Prices: {canViewPrices() ? '💰' : '🔒'}</span>
               </div>
             </div>
           </div>
