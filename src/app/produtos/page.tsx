@@ -1,8 +1,9 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL CORRIGIDA SEM LOOP INFINITO
+// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermissions } from '@/hooks/usePermissions' // 🆕 ADICIONADO
 import { useFirestore } from '@/hooks/useFirestore'
 import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
@@ -93,7 +94,7 @@ interface CategoriaProduto {
 
 // 🆕 COMPONENTE GERENCIADOR DE CÓDIGOS CORRIGIDO
 interface GerenciadorCodigosBarrasProps {
-  codigos: Record<string, number>  // 🆕 Mudança aqui
+  codigos: Record<string, number>  // �� Mudança aqui
   onChange: (codigos: Record<string, number>) => void  // 🆕 Mudança aqui
   disabled?: boolean
   onScanear?: () => void
@@ -271,7 +272,7 @@ function GerenciadorCodigosBarras({
                       disabled={disabled}
                       title="Adicionar mais unidades"
                     >
-                      ��
+                      📋
                     </button>
                     <button
                       type="button"
@@ -614,7 +615,11 @@ function CamposEspecificos({ categoria, valores, onChange, disabled }: CamposEsp
 export default function Produtos() {
   const router = useRouter()
   const { user } = useAuth()
+  const { permissions } = usePermissions() // 🆕 ADICIONADO
   const toast = useToastContext()
+  
+  // 🆕 FUNÇÃO PARA VERIFICAR SE É ADMIN
+  const isAdmin = () => user?.role === 'COMPANY_ADMIN' || user?.role === 'SUPER_ADMIN'
   
   // Margem dinâmica baseada no estado da sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -958,7 +963,7 @@ export default function Produtos() {
       nome: '',
       categoria: '',
       categoriaId: '',
-      codigosBarras: {},  // 🆕 Objeto vazio
+      codigosBarras: {},  // �� Objeto vazio
       temCodigoBarras: true,
       isDestilado: false,
       estoqueMinimo: '',
@@ -1427,7 +1432,29 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Header com botões */}
+          {/* 🆕 MENSAGEM INFORMATIVA PARA FUNCIONÁRIOS */}
+          {!isLoadingData && !isAdmin() && (
+            <div className="mb-6 bg-blue-50 border-l-4 border-blue-400 p-4 animate-slide-up">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <span className="text-2xl">👤</span>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-blue-800">
+                    Modo Funcionário - Visualização de Produtos
+                  </h3>
+                  <div className="mt-2 text-sm text-blue-700">
+                    <p>✅ Você pode visualizar todos os produtos, preços, estoque e códigos</p>
+                    <p>✅ Use os filtros para encontrar produtos rapidamente</p>
+                    <p>✅ Acesse o PDV para realizar vendas</p>
+                    <p>ℹ️ Para criar ou editar produtos, solicite ao administrador</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🔒 HEADER COM BOTÕES CONTROLADOS POR PERMISSÕES */}
           {!isLoadingData && (
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 animate-fade-in">
               <div>
@@ -1435,22 +1462,29 @@ export default function Produtos() {
                 <p className="text-sm text-gray-600 mt-1">Sistema com contagem inteligente de códigos múltiplos</p>
               </div>
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
-                <LoadingButton
-                  onClick={() => router.push('/categorias')}
-                  variant="secondary"
-                  size="md"
-                  className="w-full sm:w-auto"
-                >
-                  📂 Categorias
-                </LoadingButton>
-                <LoadingButton
-                  onClick={() => router.push('/movimentacoes')}
-                  variant="success"
-                  size="md"
-                  className="w-full sm:w-auto"
-                >
-                  📋 Movimentações
-                </LoadingButton>
+                {/* 🔒 CONTROLE DE PERMISSÕES - Botões administrativos */}
+                {isAdmin() && (
+                  <>
+                    <LoadingButton
+                      onClick={() => router.push('/categorias')}
+                      variant="secondary"
+                      size="md"
+                      className="w-full sm:w-auto"
+                    >
+                      📂 Categorias
+                    </LoadingButton>
+                    <LoadingButton
+                      onClick={() => router.push('/movimentacoes')}
+                      variant="success"
+                      size="md"
+                      className="w-full sm:w-auto"
+                    >
+                      📋 Movimentações
+                    </LoadingButton>
+                  </>
+                )}
+                
+                {/* PDV - disponível para todos */}
                 <LoadingButton
                   onClick={() => router.push('/pdv')}
                   variant="success"
@@ -1459,14 +1493,18 @@ export default function Produtos() {
                 >
                   🛒 PDV (Vendas)
                 </LoadingButton>
-                <LoadingButton
-                  onClick={() => setShowForm(true)}
-                  variant="primary"
-                  size="md"
-                  className="w-full sm:w-auto"
-                >
-                  ➕ Novo Produto
-                </LoadingButton>
+                
+                {/* 🔒 NOVO PRODUTO - só para quem pode criar */}
+                {permissions.canCreateProducts && (
+                  <LoadingButton
+                    onClick={() => setShowForm(true)}
+                    variant="primary"
+                    size="md"
+                    className="w-full sm:w-auto"
+                  >
+                    ➕ Novo Produto
+                  </LoadingButton>
+                )}
               </div>
             </div>
           )}
@@ -1568,8 +1606,8 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* FORMULÁRIO COM GERENCIADOR CORRIGIDO */}
-          {showForm && (
+          {/* 🔒 FORMULÁRIO COM CONTROLE DE PERMISSÕES */}
+          {showForm && permissions.canCreateProducts && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b">
@@ -1882,7 +1920,7 @@ export default function Produtos() {
                   {/* 🆕 GERENCIADOR DE CÓDIGOS CORRIGIDO */}
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">📱 Códigos de Barras</h4>
+                      <h4 className="text-lg font-bold text-gray-900">�� Códigos de Barras</h4>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -2043,12 +2081,38 @@ export default function Produtos() {
             </div>
           )}
 
+          {/* 🆕 MENSAGEM SE TENTAR ACESSAR SEM PERMISSÃO */}
+          {showForm && !permissions.canCreateProducts && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🔒</div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Acesso Restrito</h3>
+                  <p className="text-gray-600 mb-4">
+                    Você não tem permissão para criar ou editar produtos.
+                  </p>
+                  <p className="text-sm text-gray-500 mb-6">
+                    Entre em contato com o administrador para solicitar acesso.
+                  </p>
+                  <LoadingButton
+                    onClick={() => setShowForm(false)}
+                    variant="primary"
+                    size="md"
+                    className="w-full"
+                  >
+                    Entendi
+                  </LoadingButton>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Scanner de Código de Barras */}
           {showScanner && (
             <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
                 <div className="flex justify-between items-center p-4 border-b">
-                  <h3 className="text-lg font-bold text-gray-900">📱 Scanner de Código de Barras</h3>
+                  <h3 className="text-lg font-bold text-gray-900">�� Scanner de Código de Barras</h3>
                   <button
                     onClick={pararScanner}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2109,14 +2173,23 @@ export default function Produtos() {
                       : 'Tente ajustar os filtros para encontrar os produtos desejados.'
                     }
                   </p>
-                  <LoadingButton
-                    onClick={() => setShowForm(true)}
-                    variant="primary"
-                    size="md"
-                    className="w-full sm:w-auto"
-                  >
-                    ➕ Novo Produto
-                  </LoadingButton>
+                  {/* 🔒 CONTROLE DE PERMISSÃO */}
+                  {permissions.canCreateProducts ? (
+                    <LoadingButton
+                      onClick={() => setShowForm(true)}
+                      variant="primary"
+                      size="md"
+                      className="w-full sm:w-auto"
+                    >
+                      ➕ Novo Produto
+                    </LoadingButton>
+                  ) : (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
+                      <p className="text-sm text-blue-700">
+                        👤 <strong>Modo Funcionário:</strong> Para cadastrar produtos, solicite ao administrador
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -2232,7 +2305,7 @@ export default function Produtos() {
                                   {/* Badge destilado */}
                                   {produto.isDestilado && (
                                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                      🥃 Destilado
+                                      �� Destilado
                                     </span>
                                   )}
 
@@ -2264,35 +2337,57 @@ export default function Produtos() {
                                 </div>
                               </div>
 
-                              {/* Ações Mobile */}
+                              {/* 🔒 AÇÕES MOBILE COM CONTROLE DE PERMISSÕES */}
                               <div className="flex flex-col space-y-2 ml-4">
-                                <LoadingButton
-                                  onClick={() => handleEdit(produto)}
-                                  isLoading={loading}
-                                  variant="primary"
-                                  size="sm"
-                                  className="text-xs px-2 py-1"
-                                >
-                                  ✏️
-                                </LoadingButton>
-                                <LoadingButton
-                                  onClick={() => toggleStatus(produto.id)}
-                                  isLoading={loading}
-                                  variant={produto.ativo ? "warning" : "success"}
-                                  size="sm"
-                                  className="text-xs px-2 py-1"
-                                >
-                                  {produto.ativo ? '⏸️' : '▶️'}
-                                </LoadingButton>
-                                <LoadingButton
-                                  onClick={() => handleDelete(produto.id)}
-                                  isLoading={loading}
-                                  variant="danger"
-                                  size="sm"
-                                  className="text-xs px-2 py-1"
-                                >
-                                  🗑️
-                                </LoadingButton>
+                                {permissions.canCreateProducts && (
+                                  <LoadingButton
+                                    onClick={() => handleEdit(produto)}
+                                    isLoading={loading}
+                                    variant="primary"
+                                    size="sm"
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    ✏️
+                                  </LoadingButton>
+                                )}
+                                {permissions.canCreateProducts && (
+                                  <LoadingButton
+                                    onClick={() => toggleStatus(produto.id)}
+                                    isLoading={loading}
+                                    variant={produto.ativo ? "warning" : "success"}
+                                    size="sm"
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    {produto.ativo ? '⏸️' : '▶️'}
+                                  </LoadingButton>
+                                )}
+                                {permissions.canDeleteProducts && (
+                                  <LoadingButton
+                                    onClick={() => handleDelete(produto.id)}
+                                    isLoading={loading}
+                                    variant="danger"
+                                    size="sm"
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    🗑️
+                                  </LoadingButton>
+                                )}
+                                {/* 🆕 BOTÃO INFO PARA FUNCIONÁRIOS */}
+                                {!permissions.canCreateProducts && (
+                                  <LoadingButton
+                                    onClick={() => {
+                                      toast.info(
+                                        'Informações do produto',
+                                        `${produto.nome} - Estoque: ${produto.estoque} unidades - Preço: R$ ${produto.valorVenda.toFixed(2)}`
+                                      )
+                                    }}
+                                    variant="secondary"
+                                    size="sm"
+                                    className="text-xs px-2 py-1"
+                                  >
+                                    ℹ️
+                                  </LoadingButton>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2489,32 +2584,56 @@ export default function Produtos() {
                                   {produto.ativo ? '✅ Ativo' : '❌ Inativo'}
                                 </span>
                               </td>
+                              
+                              {/* 🔒 AÇÕES DESKTOP COM CONTROLE DE PERMISSÕES */}
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <div className="flex space-x-2">
-                                  <LoadingButton
-                                    onClick={() => handleEdit(produto)}
-                                    isLoading={loading}
-                                    variant="primary"
-                                    size="sm"
-                                  >
-                                    ✏️
-                                  </LoadingButton>
-                                  <LoadingButton
-                                    onClick={() => toggleStatus(produto.id)}
-                                    isLoading={loading}
-                                    variant={produto.ativo ? "warning" : "success"}
-                                    size="sm"
-                                  >
-                                    {produto.ativo ? '⏸️' : '▶️'}
-                                  </LoadingButton>
-                                  <LoadingButton
-                                    onClick={() => handleDelete(produto.id)}
-                                    isLoading={loading}
-                                    variant="danger"
-                                    size="sm"
-                                  >
-                                    🗑️
-                                  </LoadingButton>
+                                  {permissions.canCreateProducts && (
+                                    <LoadingButton
+                                      onClick={() => handleEdit(produto)}
+                                      isLoading={loading}
+                                      variant="primary"
+                                      size="sm"
+                                    >
+                                      ✏️
+                                    </LoadingButton>
+                                  )}
+                                  {permissions.canCreateProducts && (
+                                    <LoadingButton
+                                      onClick={() => toggleStatus(produto.id)}
+                                      isLoading={loading}
+                                      variant={produto.ativo ? "warning" : "success"}
+                                      size="sm"
+                                    >
+                                      {produto.ativo ? '⏸️' : '▶️'}
+                                    </LoadingButton>
+                                  )}
+                                  {permissions.canDeleteProducts && (
+                                    <LoadingButton
+                                      onClick={() => handleDelete(produto.id)}
+                                      isLoading={loading}
+                                      variant="danger"
+                                      size="sm"
+                                    >
+                                      🗑️
+                                    </LoadingButton>
+                                  )}
+                                  
+                                  {/* 🆕 BOTÃO INFO PARA FUNCIONÁRIOS */}
+                                  {!permissions.canCreateProducts && (
+                                    <LoadingButton
+                                      onClick={() => {
+                                        toast.info(
+                                          'Informações do produto',
+                                          `${produto.nome} - Estoque: ${produto.estoque} unidades - Preço: R$ ${produto.valorVenda.toFixed(2)}`
+                                        )
+                                      }}
+                                      variant="secondary"
+                                      size="sm"
+                                    >
+                                      ℹ️
+                                    </LoadingButton>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2660,15 +2779,15 @@ export default function Produtos() {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-green-800 mb-2">
-                  Sistema Avançado: Contagem Inteligente de Códigos (SEM LOOP INFINITO)
+                  Sistema Avançado: Contagem Inteligente de Códigos com Controle de Permissões
                 </h3>
                 <div className="text-sm text-green-700 space-y-2">
                   <p>• <strong>🔢 Contagem por código:</strong> Cada código registra quantas unidades existem</p>
                   <p>• <strong>📱 Scanner integrado:</strong> Adicione códigos diretamente com câmera ou digitação</p>
                   <p>• <strong>➕/➖ Controle granular:</strong> Ajuste quantidades individualmente por código</p>
                   <p>• <strong>🔄 Sincronização controlada:</strong> Movimentações atualizam contagens sem loops</p>
-                  <p>• <strong>🛒 Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
-                  <p>• <strong>📊 Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
+                  <p>• <strong>�� Integração PDV:</strong> Vendas decrementam unidades específicas do código usado</p>
+                  <p>• <strong>�� Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
                   <p>• <strong>🥃 Destilados inteligentes:</strong> Bebidas destiladas automaticamente sem validade</p>
                   <p>• <strong>📝 Produtos sem código:</strong> Suporte a itens avulsos e personalizados</p>
                   <p>• <strong>🎨 Interface visual:</strong> Cores por categoria e indicadores claros</p>
@@ -2678,6 +2797,9 @@ export default function Produtos() {
                   <p>• <strong>🛡️ Sistema estável:</strong> Corrigido problema de loop infinito no carregamento</p>
                   <p>• <strong>⏰ Timeout de segurança:</strong> Interface forçada após 10 segundos se necessário</p>
                   <p>• <strong>🎯 Sincronização inteligente:</strong> Apenas quando necessário (intervalos de 10 minutos)</p>
+                  <p>• <strong>🔒 Controle de permissões:</strong> Funcionários só visualizam, administradores editam tudo</p>
+                  <p>• <strong>👤 Interface adaptativa:</strong> Botões e funcionalidades baseados no perfil do usuário</p>
+                  <p>• <strong>💡 Mensagens educativas:</strong> Orientações claras sobre limitações e funcionalidades</p>
                 </div>
               </div>
             </div>
@@ -2689,13 +2811,14 @@ export default function Produtos() {
               <div className="flex items-center space-x-3">
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium text-blue-800">
-                  Sistema operacional - Sem loops de carregamento
+                  Sistema operacional - Controle de permissões ativo
                 </span>
               </div>
               <div className="text-xs text-blue-600 space-x-4">
                 <span>Loading: {isLoadingData ? '🔄' : '✅'}</span>
                 <span>Sync: {sincronizandoManualmente ? '🔄' : '✅'}</span>
-                <span>Timeout: {forceShowContent ? '⏰' : '⌚'}</span>
+                <span>Permissions: {permissions.canCreateProducts ? '👑' : '👤'}</span>
+                <span>Role: {isAdmin() ? 'Admin' : 'Employee'}</span>
               </div>
             </div>
           </div>
