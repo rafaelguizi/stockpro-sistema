@@ -1,4 +1,4 @@
-// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES E VALORES
+// src/app/produtos/page.tsx - VERSÃO FINAL COM CONTROLE DE PERMISSÕES, VALORES E EXCEL
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,6 +9,14 @@ import { useToastContext } from '@/components/ToastProvider'
 import LoadingButton from '@/components/LoadingButton'
 import MobileHeader from '@/components/MobileHeader'
 import ProtectedRoute from '@/components/ProtectedRoute'
+// 🆕 IMPORTS EXCEL
+import { 
+  gerarModeloExcel, 
+  exportarProdutos, 
+  processarArquivoExcel, 
+  validarDadosExcel,
+  ProdutoExcel 
+} from '@/utils/excelUtils'
 
 // 🆕 INTERFACE CATEGORIA FIRESTORE
 interface CategoriaFirestore {
@@ -52,7 +60,7 @@ interface Produto {
   tamanho?: string
 }
 
-// �� INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
+// 🔄 INTERFACE MOVIMENTACAO PARA SINCRONIZAÇÃO
 interface Movimentacao {
   id: string
   produto: string
@@ -681,6 +689,13 @@ export default function Produtos() {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>('')
   const [camposEspecificos, setCamposEspecificos] = useState<Record<string, any>>({})
 
+  // 🆕 ESTADOS EXCEL
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [arquivoImport, setArquivoImport] = useState<File | null>(null)
+  const [dadosImport, setDadosImport] = useState<ProdutoExcel[]>([])
+  const [importando, setImportando] = useState(false)
+  const [errosValidacao, setErrosValidacao] = useState<string[]>([])
+
   // 🆕 ESTADOS DO FORMULÁRIO CORRIGIDOS
   const [formData, setFormData] = useState({
     nome: '',
@@ -768,6 +783,117 @@ export default function Produtos() {
       }
     }
   }, [movimentacoes, loadingMovimentacoes, loadingProdutos])
+
+  // 🆕 FUNÇÕES EXCEL
+  // 📥 Função para importar arquivo
+  const handleImportarArquivo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setArquivoImport(file)
+    setErrosValidacao([])
+
+    try {
+      const dados = await processarArquivoExcel(file)
+      const { validos, erros } = validarDadosExcel(dados)
+      
+      if (!validos) {
+        setErrosValidacao(erros)
+        return
+      }
+
+      setDadosImport(dados)
+      toast.success('Arquivo validado!', `${dados.length} produto(s) encontrado(s)`)
+    } catch (error) {
+      console.error('Erro ao processar arquivo:', error)
+      toast.error('Erro no arquivo', error instanceof Error ? error.message : 'Formato inválido')
+    }
+  }
+
+  // 💾 Função para processar importação
+  const processarImportacao = async () => {
+    if (!dadosImport.length || !user) return
+
+    setImportando(true)
+    let sucessos = 0
+    let erros = 0
+
+    try {
+      for (const produtoExcel of dadosImport) {
+        try {
+          // Converter dados do Excel para formato do sistema
+          const codigosBarras: Record<string, number> = {}
+          
+          if (produtoExcel.codigosBarras) {
+            const codigos = produtoExcel.codigosBarras.split(',')
+            codigos.forEach(codigo => {
+              const [cod, qtd] = codigo.split(':')
+              if (cod && qtd) {
+                codigosBarras[cod.trim()] = parseInt(qtd.trim()) || 1
+              }
+            })
+          }
+
+          // Converter data de validade
+          let dataValidade = ''
+          if (produtoExcel.dataValidade) {
+            const [dia, mes, ano] = produtoExcel.dataValidade.split('/')
+            dataValidade = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
+          }
+
+          const novoProduto = {
+            codigo: produtoExcel.codigo.toString(),
+            nome: produtoExcel.nome.toString(),
+            categoria: produtoExcel.categoria.toString(),
+            marca: produtoExcel.marca?.toString() || '',
+            modelo: produtoExcel.modelo?.toString() || '',
+            cor: produtoExcel.cor?.toString() || '',
+            tamanho: produtoExcel.tamanho?.toString() || '',
+            codigosBarras,
+            temCodigoBarras: produtoExcel.temCodigoBarras?.toString().toUpperCase() === 'SIM',
+            isDestilado: produtoExcel.isDestilado?.toString().toUpperCase() === 'SIM',
+            estoqueMinimo: Number(produtoExcel.estoqueMinimo) || 0,
+            valorCompra: Number(produtoExcel.valorCompra) || 0,
+            valorVenda: Number(produtoExcel.valorVenda) || 0,
+            estoque: Number(produtoExcel.estoqueAtual) || 0,
+            ativo: produtoExcel.ativo?.toString().toUpperCase() === 'SIM',
+            temValidade: produtoExcel.temValidade?.toString().toUpperCase() === 'SIM',
+            dataValidade: dataValidade || undefined,
+            diasAlerta: Number(produtoExcel.diasAlerta) || 30,
+            dataCadastro: new Date().toLocaleDateString('pt-BR'),
+            userId: user.uid
+          }
+
+          await addDocument(novoProduto)
+          sucessos++
+        } catch (error) {
+          console.error(`Erro ao importar produto ${produtoExcel.codigo}:`, error)
+          erros++
+        }
+      }
+
+      toast.success(
+        'Importação concluída!', 
+        `${sucessos} produto(s) importado(s), ${erros} erro(s)`
+      )
+
+      if (sucessos > 0) {
+        sincronizarDados()
+      }
+
+      // Resetar modal
+      setShowImportModal(false)
+      setArquivoImport(null)
+      setDadosImport([])
+      setErrosValidacao([])
+
+    } catch (error) {
+      console.error('Erro na importação:', error)
+      toast.error('Erro na importação', 'Não foi possível importar os produtos')
+    } finally {
+      setImportando(false)
+    }
+  }
 
   // Categorias ativas Firestore
   const categoriasAtivasFirestore = useMemo(() => {
@@ -1454,7 +1580,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🔒 HEADER COM BOTÕES CONTROLADOS POR PERMISSÕES */}
+          {/* 🔒 HEADER COM BOTÕES CONTROLADOS POR PERMISSÕES - INCLUINDO EXCEL */}
           {!isLoadingData && (
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 animate-fade-in">
               <div>
@@ -1481,6 +1607,36 @@ export default function Produtos() {
                     >
                       📋 Movimentações
                     </LoadingButton>
+                    
+                    {/* 🆕 BOTÕES EXCEL - SÓ PARA ADMINS */}
+                    <LoadingButton
+                      onClick={gerarModeloExcel}
+                      variant="warning"
+                      size="md"
+                      className="w-full sm:w-auto"
+                    >
+                      📊 Baixar Modelo Excel
+                    </LoadingButton>
+                    
+                    {produtos && produtos.length > 0 && (
+                      <LoadingButton
+                        onClick={() => exportarProdutos(produtos)}
+                        variant="warning"
+                        size="md"
+                        className="w-full sm:w-auto"
+                      >
+                        📤 Exportar Excel
+                      </LoadingButton>
+                    )}
+                    
+                    <LoadingButton
+                      onClick={() => setShowImportModal(true)}
+                      variant="success"
+                      size="md"
+                      className="w-full sm:w-auto"
+                    >
+                      📥 Importar Excel
+                    </LoadingButton>
                   </>
                 )}
                 
@@ -1505,6 +1661,153 @@ export default function Produtos() {
                     ➕ Novo Produto
                   </LoadingButton>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 MODAL DE IMPORTAÇÃO EXCEL */}
+          {showImportModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center p-6 border-b">
+                  <h3 className="text-lg font-bold text-gray-900">📥 Importar Produtos via Excel</h3>
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false)
+                      setArquivoImport(null)
+                      setDadosImport([])
+                      setErrosValidacao([])
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    disabled={importando}
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Instruções */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-bold text-blue-800 mb-2">📋 Como importar:</h4>
+                    <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                      <li>Baixe o modelo Excel clicando em "📊 Baixar Modelo Excel"</li>
+                      <li>Preencha o arquivo com seus produtos seguindo as instruções</li>
+                      <li>Selecione o arquivo preenchido abaixo</li>
+                      <li>Clique em "Importar Produtos" após validação</li>
+                    </ol>
+                  </div>
+
+                  {/* Upload de arquivo */}
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <div className="text-4xl mb-4">📊</div>
+                    <h4 className="text-lg font-bold text-gray-900 mb-2">Selecione o arquivo Excel</h4>
+                    <p className="text-gray-600 mb-4">Apenas arquivos .xlsx são aceitos</p>
+                    
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleImportarArquivo}
+                      className="hidden"
+                      id="file-upload"
+                      disabled={importando}
+                    />
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+                    >
+                      Escolher Arquivo
+                    </label>
+                    
+                    {arquivoImport && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        Arquivo selecionado: {arquivoImport.name}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Erros de validação */}
+                  {errosValidacao.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <h4 className="font-bold text-red-800 mb-2">❌ Erros encontrados:</h4>
+                      <div className="max-h-40 overflow-y-auto">
+                        <ul className="text-sm text-red-700 space-y-1">
+                          {errosValidacao.map((erro, index) => (
+                            <li key={index}>• {erro}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview dos dados */}
+                  {dadosImport.length > 0 && errosValidacao.length === 0 && (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <h4 className="font-bold text-green-800 mb-2">✅ Dados validados com sucesso!</h4>
+                      <p className="text-sm text-green-700 mb-4">
+                        {dadosImport.length} produto(s) prontos para importação
+                      </p>
+                      
+                      {/* Amostra dos primeiros 3 produtos */}
+                      <div className="bg-white rounded border overflow-hidden">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-2 py-1 text-left">Código</th>
+                              <th className="px-2 py-1 text-left">Nome</th>
+                              <th className="px-2 py-1 text-left">Categoria</th>
+                              <th className="px-2 py-1 text-left">Estoque</th>
+                              <th className="px-2 py-1 text-left">Preço</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dadosImport.slice(0, 3).map((produto, index) => (
+                              <tr key={index} className="border-t">
+                                <td className="px-2 py-1">{produto.codigo}</td>
+                                <td className="px-2 py-1">{produto.nome}</td>
+                                <td className="px-2 py-1">{produto.categoria}</td>
+                                <td className="px-2 py-1">{produto.estoqueAtual}</td>
+                                <td className="px-2 py-1">R$ {Number(produto.valorVenda).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {dadosImport.length > 3 && (
+                          <div className="text-center py-2 text-gray-500 text-xs bg-gray-50">
+                            ... e mais {dadosImport.length - 3} produto(s)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Botões */}
+                  <div className="flex space-x-3">
+                    <LoadingButton
+                      onClick={() => gerarModeloExcel()}
+                      variant="secondary"
+                      size="md"
+                      className="flex-1"
+                      disabled={importando}
+                    >
+                      📊 Baixar Modelo
+                    </LoadingButton>
+                    
+                    {dadosImport.length > 0 && errosValidacao.length === 0 && (
+                      <LoadingButton
+                        onClick={processarImportacao}
+                        isLoading={importando}
+                        loadingText="Importando..."
+                        variant="primary"
+                        size="md"
+                        className="flex-1"
+                      >
+                        📥 Importar {dadosImport.length} Produto(s)
+                      </LoadingButton>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2169,20 +2472,30 @@ export default function Produtos() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum produto encontrado</h3>
                   <p className="text-gray-500 mb-4">
                     {!produtos || produtos.length === 0
-                      ? 'Comece cadastrando produtos com sistema de contagem de códigos.'
+                      ? 'Comece importando produtos via Excel ou cadastrando manualmente.'
                       : 'Tente ajustar os filtros para encontrar os produtos desejados.'
                     }
                   </p>
-                  {/* 🔒 CONTROLE DE PERMISSÃO */}
+                  {/* 🔒 CONTROLE DE PERMISSÃO COM EXCEL */}
                   {(permissions.canCreateProducts && isAdmin()) ? (
-                    <LoadingButton
-                      onClick={() => setShowForm(true)}
-                      variant="primary"
-                      size="md"
-                      className="w-full sm:w-auto"
-                    >
-                      ➕ Novo Produto
-                    </LoadingButton>
+                    <div className="space-y-3">
+                      <LoadingButton
+                        onClick={() => setShowForm(true)}
+                        variant="primary"
+                        size="md"
+                        className="w-full sm:w-auto mr-3"
+                      >
+                        ➕ Novo Produto
+                      </LoadingButton>
+                      <LoadingButton
+                        onClick={() => setShowImportModal(true)}
+                        variant="success"
+                        size="md"
+                        className="w-full sm:w-auto"
+                      >
+                        📥 Importar Excel
+                      </LoadingButton>
+                    </div>
                   ) : (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
                       <p className="text-sm text-blue-700">
@@ -2664,10 +2977,31 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* Estatísticas finais atualizadas */}
+          {/* Estatísticas finais atualizadas com Excel */}
           {!isLoadingData && produtos && produtos.length > 0 && (
             <div className="mt-8 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-6 border-2 border-purple-200 animate-fade-in">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">📊 Resumo dos Produtos com Contagem</h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-gray-800">📊 Resumo dos Produtos com Excel</h3>
+                {isAdmin() && (
+                  <div className="flex space-x-2">
+                    <LoadingButton
+                      onClick={gerarModeloExcel}
+                      variant="warning"
+                      size="sm"
+                    >
+                      📊 Modelo
+                    </LoadingButton>
+                    <LoadingButton
+                      onClick={() => exportarProdutos(produtos)}
+                      variant="warning"
+                      size="sm"
+                    >
+                      📤 Exportar
+                    </LoadingButton>
+                  </div>
+                )}
+              </div>
+              
               <div className={`grid grid-cols-2 sm:grid-cols-3 ${canViewPrices() ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>
                 <div className="text-center p-4 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow">
                   <div className="text-2xl font-bold text-blue-600">{produtos.filter(p => p.ativo).length}</div>
@@ -2791,7 +3125,7 @@ export default function Produtos() {
             </div>
           )}
 
-          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA COMPLETAMENTE INTEGRADO */}
+          {/* 🆕 INFORMAÇÕES SOBRE SISTEMA COMPLETAMENTE INTEGRADO COM EXCEL */}
           <div className="mt-6 bg-green-50 border-2 border-green-200 rounded-xl p-6 animate-fade-in">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -2799,10 +3133,14 @@ export default function Produtos() {
               </div>
               <div className="ml-4">
                 <h3 className="text-lg font-bold text-green-800 mb-2">
-                  Sistema Avançado: Contagem Inteligente com Controle de Permissões
+                  Sistema Completo: Contagem + Excel + Permissões
                 </h3>
                 <div className="text-sm text-green-700 space-y-2">
-                  <p>• <strong>🔢 Contagem por código:</strong> Cada código registra quantas unidades existem</p>
+                  <p>• <strong>📊 Importação Excel:</strong> Migre facilmente seus produtos existentes</p>
+                  <p>• <strong>📤 Exportação Excel:</strong> Faça backup dos dados a qualquer momento</p>
+                  <p>• <strong>🎯 Modelo padrão:</strong> Template com instruções e exemplos</p>
+                  <p>• <strong>✅ Validação automática:</strong> Detecta erros antes da importação</p>
+                  <p>• <strong>🔢 Contagem por código:</strong> Sistema inteligente de códigos múltiplos</p>
                   <p>• <strong>📱 Scanner integrado:</strong> Adicione códigos diretamente com câmera ou digitação</p>
                   <p>• <strong>➕/➖ Controle granular:</strong> Ajuste quantidades individualmente por código</p>
                   <p>• <strong>🔄 Sincronização controlada:</strong> Movimentações atualizam contagens sem loops</p>
@@ -2810,36 +3148,29 @@ export default function Produtos() {
                   <p>• <strong>📊 Relatórios detalhados:</strong> Veja quantas unidades há de cada código</p>
                   <p>• <strong>🥃 Destilados inteligentes:</strong> Bebidas destiladas automaticamente sem validade</p>
                   <p>• <strong>📝 Produtos sem código:</strong> Suporte a itens avulsos e personalizados</p>
-                  <p>• <strong>🎨 Interface visual:</strong> Cores por categoria e indicadores claros</p>
-                  <p>• <strong>✅ Validação robusta:</strong> Impede códigos duplicados entre produtos</p>
-                  <p>• <strong>⚡ Performance otimizada:</strong> Sistema eficiente para grandes volumes</p>
-                  <p>• <strong>🔔 Alertas inteligentes:</strong> Notificações quando códigos são utilizados</p>
-                  <p>• <strong>🛡️ Sistema estável:</strong> Corrigido problema de loop infinito no carregamento</p>
-                  <p>• <strong>⏰ Timeout de segurança:</strong> Interface forçada após 10 segundos se necessário</p>
-                  <p>• <strong>🎯 Sincronização inteligente:</strong> Apenas quando necessário (intervalos de 10 minutos)</p>
                   <p>• <strong>🔒 Controle de permissões:</strong> Funcionários só visualizam, administradores editam tudo</p>
                   <p>• <strong>👤 Interface adaptativa:</strong> Botões e funcionalidades baseados no perfil do usuário</p>
                   <p>• <strong>💰 Proteção financeira:</strong> Valores de compra/venda ocultos para funcionários</p>
-                  <p>• <strong>💡 Mensagens educativas:</strong> Orientações claras sobre limitações e funcionalidades</p>
+                  <p>• <strong>🔄 Integração total:</strong> Excel + PDV + Movimentações sincronizados</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ✅ INDICADOR DE STATUS DO SISTEMA */}
+          {/* ✅ INDICADOR DE STATUS DO SISTEMA COM EXCEL */}
           <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium text-blue-800">
-                  Sistema operacional - Controle de permissões e valores ativos
+                  Sistema completo operacional - Excel + Contagem + Permissões
                 </span>
               </div>
               <div className="text-xs text-blue-600 space-x-4">
-                <span>Loading: {isLoadingData ? '🔄' : '✅'}</span>
+                <span>Excel: ✅</span>
                 <span>Sync: {sincronizandoManualmente ? '🔄' : '✅'}</span>
-                <span>Permissions: {(permissions.canCreateProducts && isAdmin()) ? '👑' : '👤'}</span>
                 <span>Role: {isAdmin() ? 'Admin' : 'Employee'}</span>
+                <span>Import: {showImportModal ? '📥' : '✅'}</span>
                 <span>Prices: {canViewPrices() ? '💰' : '🔒'}</span>
               </div>
             </div>
